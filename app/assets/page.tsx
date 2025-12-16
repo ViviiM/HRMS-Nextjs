@@ -1,181 +1,107 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { MainNav } from "@/components/main-nav"
-import { getAuthToken } from "@/lib/auth"
-import { AssetTable } from "./components/asset-table"
-import { AssetAssignForm } from "./components/asset-assign-form"
-import { AssetForm } from "./components/asset-form"
-import type { Asset } from "@/types"
-import { Button, message } from "antd"
-import { PlusOutlined } from "@ant-design/icons"
-
-const mockAssets: Asset[] = [
-  {
-    id: "1",
-    assetTag: "LAPTOP-001",
-    name: "Dell XPS 13",
-    type: "laptop",
-    category: "laptop",
-    purchaseDate: "2022-03-15",
-    purchaseCost: 1500,
-    currentValue: 900,
-    status: "assigned",
-    assignedTo: "John Doe",
-    assignmentDate: "2022-03-15",
-    condition: "good",
-    serialNumber: "SN-99922",
-    vendor: "Dell"
-  },
-  {
-    id: "2",
-    assetTag: "PHONE-001",
-    name: "iPhone 14 Pro",
-    type: "mobile",
-    category: "mobile",
-    purchaseDate: "2022-09-20",
-    purchaseCost: 1200,
-    currentValue: 600,
-    status: "available",
-    condition: "new",
-    serialNumber: "SN-77711",
-    vendor: "Apple"
-  }
-]
-
-const mockEmployees = [
-  { id: "1", firstName: "John", lastName: "Doe" },
-  { id: "2", firstName: "Jane", lastName: "Smith" },
-]
+import { useState, useEffect } from "react";
+import { Tag, Button } from "antd"; // Using Antd as requested in previous convo/style
+import { Laptop, Phone, Tablet, Headphones, BadgeCheck, Clock } from "lucide-react";
+import { format } from "date-fns";
+import { useSession } from "next-auth/react";
 
 export default function AssetsPage() {
-  const router = useRouter()
-  const [assets, setAssets] = useState<Asset[]>([])
-  const [showAssignForm, setShowAssignForm] = useState(false)
-  const [showAssetForm, setShowAssetForm] = useState(false)
-  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null)
-  const [editingAsset, setEditingAsset] = useState<Asset | null>(null)
+  const { data: session } = useSession();
+  const [assets, setAssets] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Determine Role View
+  const role = (session?.user as any)?.role;
+  const isHR = role === 'HR' || role === 'Admin';
+
+  const fetchAssets = async () => {
+    try {
+       const res = await fetch("/api/assets");
+       const json = await res.json();
+       if(json.success) setAssets(json.data);
+    } catch(e) { console.error(e); } 
+    finally { setLoading(false); }
+  };
 
   useEffect(() => {
-    if (!getAuthToken()) {
-      router.push("/auth/login")
-    }
-    setAssets(mockAssets)
-  }, [router])
+    if(session) fetchAssets();
+  }, [session]);
 
-  const handleAssign = (asset: Asset) => {
-    setSelectedAsset(asset)
-    setShowAssignForm(true)
-  }
+  if (loading) return <div className="p-10 text-center text-gray-400">Loading assets...</div>;
 
-  const handleSubmitAssignment = (assetId: string, employeeId: string) => {
-    const employee = mockEmployees.find((e) => e.id === employeeId)
-    if (employee) {
-      setAssets((prev) =>
-        prev.map((a) =>
-          a.id === assetId
-            ? {
-                ...a,
-                assignedTo: `${employee.firstName} ${employee.lastName}`,
-                status: "assigned" as const,
-                assignmentDate: new Date().toISOString().split("T")[0],
-              }
-            : a,
-        ),
-      )
-      setShowAssignForm(false)
-      setSelectedAsset(null)
-      message.success("Asset assigned successfully!")
-    }
-  }
-
-  const handleAddAsset = (data: Asset | Omit<Asset, "id">) => {
-      const newAsset = { ...data, id: Math.random().toString(36).substr(2, 9) } as Asset
-      setAssets([...assets, newAsset])
-      setShowAssetForm(false)
-  }
-
-  const handleUpdateAsset = (data: Asset | Omit<Asset, "id">) => {
-      setAssets(assets.map(a => a.id === (data as Asset).id ? (data as Asset) : a))
-      setEditingAsset(null)
-  }
-
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this asset?")) {
-      setAssets((prev) => prev.filter((a) => a.id !== id))
-      message.success("Asset deleted")
-    }
-  }
+  const getIcon = (category: string) => {
+      switch(category) {
+          case 'Laptop': return <Laptop className="w-5 h-5 text-blue-500" />;
+          case 'Mobile': return <Phone className="w-5 h-5 text-green-500" />;
+          case 'Headset': return <Headphones className="w-5 h-5 text-purple-500" />;
+          default: return <Tablet className="w-5 h-5 text-gray-500" />;
+      }
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50/50">
-      <MainNav />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-4xl font-extrabold text-slate-900 mb-2 tracking-tight">Asset Management</h1>
-            <p className="text-slate-500 text-lg">Track company assets and equipment</p>
-          </div>
-          <Button 
-            type="primary" 
-            size="large" 
-            icon={<PlusOutlined />} 
-            onClick={() => setShowAssetForm(true)}
-          >
-            Add New Asset
-          </Button>
-        </div>
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex justify-between items-center mb-8">
+         <div>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+                {isHR ? "Asset Inventory" : "My Assets"}
+            </h1>
+            <p className="text-slate-500 mt-1">Track and manage allocated devices</p>
+         </div>
+         {isHR && (
+             <Button type="primary" className="bg-blue-600 h-10 px-6 rounded-lg font-medium">Add Asset</Button>
+         )}
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-slate-100">
-            <div className="text-sm font-medium text-slate-500 mb-2">Total Assets</div>
-            <div className="text-3xl font-bold text-blue-600">{assets.length}</div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-slate-100">
-            <div className="text-sm font-medium text-slate-500 mb-2">Total Value</div>
-            <div className="text-3xl font-bold text-emerald-600">
-              ${assets.reduce((sum, a) => sum + (Number(a.currentValue) || 0), 0).toLocaleString()}
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-slate-100">
-            <div className="text-sm font-medium text-slate-500 mb-2">Available</div>
-            <div className="text-3xl font-bold text-amber-600">
-              {assets.filter((a) => a.status === "available").length}
-            </div>
-          </div>
-        </div>
-
-        <AssetTable 
-            assets={assets} 
-            onAssign={handleAssign} 
-            onEdit={(asset) => setEditingAsset(asset)} 
-            onDelete={handleDelete} 
-        />
-
-        {showAssignForm && selectedAsset && (
-          <AssetAssignForm
-            asset={selectedAsset}
-            employees={mockEmployees}
-            onSubmit={handleSubmitAssignment}
-            onCancel={() => {
-              setShowAssignForm(false)
-              setSelectedAsset(null)
-            }}
-          />
-        )}
-
-        {(showAssetForm || editingAsset) && (
-            <AssetForm
-                asset={editingAsset || undefined}
-                onSubmit={editingAsset ? handleUpdateAsset : handleAddAsset}
-                onCancel={() => {
-                    setShowAssetForm(false)
-                    setEditingAsset(null)
-                }}
-            />
-        )}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          {assets.length === 0 ? (
+              <div className="p-10 text-center text-gray-500">No assets found.</div>
+          ) : (
+              <table className="w-full text-sm text-left">
+                 <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
+                    <tr>
+                        <th className="px-6 py-4">Asset Name</th>
+                        <th className="px-6 py-4">Category</th>
+                        <th className="px-6 py-4">Serial No.</th>
+                        {isHR && <th className="px-6 py-4">Assigned To</th>}
+                        <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4">Warranty</th>
+                        {isHR && <th className="px-6 py-4 text-right">Actions</th>}
+                    </tr>
+                 </thead>
+                 <tbody className="divide-y divide-gray-100">
+                    {assets.map((asset: any) => (
+                        <tr key={asset.Id} className="hover:bg-gray-50/50">
+                            <td className="px-6 py-4 font-medium text-gray-900 flex items-center gap-2">
+                                {getIcon(asset.Category__c)}
+                                {asset.Name}
+                            </td>
+                            <td className="px-6 py-4">{asset.Category__c}</td>
+                            <td className="px-6 py-4 font-mono text-xs">{asset.Serial_Number__c}</td>
+                            {isHR && <td className="px-6 py-4">{asset.Assigned_To__r?.Name || '-'}</td>}
+                            <td className="px-6 py-4">
+                                <Tag color={
+                                    asset.Status__c === 'Available' ? 'green' :
+                                    asset.Status__c === 'Assigned' ? 'blue' :
+                                    'red'
+                                }>
+                                    {asset.Status__c}
+                                </Tag>
+                            </td>
+                            <td className="px-6 py-4 text-gray-500">
+                                {asset.Warranty_Expiry__c ? format(new Date(asset.Warranty_Expiry__c), 'MMM d, yyyy') : '-'}
+                            </td>
+                            {isHR && (
+                                <td className="px-6 py-4 text-right">
+                                    <button className="text-blue-600 hover:underline text-xs">Edit</button>
+                                </td>
+                            )}
+                        </tr>
+                    ))}
+                 </tbody>
+              </table>
+          )}
       </div>
     </div>
-  )
+  );
 }

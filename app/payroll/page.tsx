@@ -1,159 +1,108 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { MainNav } from "@/components/main-nav"
-import { getAuthToken } from "@/lib/auth"
-import { SalaryCalculator } from "./components/salary-calculator"
-import { PayrollTable } from "./components/payroll-table"
-import { BankFileGenerator } from "./components/bank-file-generator"
-import { usePayrollStore } from "@/store/payrollStore"
-import type { Payroll } from "@/types"
-
-const mockPayrolls: Payroll[] = [
-  {
-    id: "1",
-    employeeId: "1",
-    employeeName: "John Doe",
-    month: "June",
-    year: 2024,
-    basicSalary: 120000,
-    allowances: 15000,
-    deductions: 5000,
-    taxAmount: 18000,
-    netSalary: 112000,
-    status: "paid",
-    paymentDate: "2024-06-30",
-  },
-  {
-    id: "2",
-    employeeId: "2",
-    employeeName: "Jane Smith",
-    month: "June",
-    year: 2024,
-    basicSalary: 95000,
-    allowances: 12000,
-    deductions: 4000,
-    taxAmount: 14250,
-    netSalary: 88750,
-    status: "paid",
-    paymentDate: "2024-06-30",
-  },
-  {
-    id: "3",
-    employeeId: "3",
-    employeeName: "Mike Johnson",
-    month: "July",
-    year: 2024,
-    basicSalary: 75000,
-    allowances: 8000,
-    deductions: 3000,
-    taxAmount: 11250,
-    netSalary: 68750,
-    status: "processed",
-  },
-  {
-    id: "4",
-    employeeId: "4",
-    employeeName: "Sarah Williams",
-    month: "July",
-    year: 2024,
-    basicSalary: 85000,
-    allowances: 10000,
-    deductions: 3500,
-    taxAmount: 12750,
-    netSalary: 78750,
-    status: "draft",
-  },
-]
-
-import { message } from "antd"
-
-// ... imports
+import { useEffect, useState } from "react";
+import { Download, FileText, CheckCircle, Clock } from "lucide-react";
+import { format } from "date-fns"; // If needed for formatting custom dates
+// Using simple cards
 
 export default function PayrollPage() {
-  const router = useRouter()
-  const [payrolls, setPayrolls] = useState<Payroll[]>([])
-  const { setPayrolls: setStorePayrolls } = usePayrollStore()
+  const [payslips, setPayslips] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!getAuthToken()) {
-      router.push("/auth/login")
-    }
-    if (payrolls.length === 0) {
-      setPayrolls(mockPayrolls)
-      setStorePayrolls(mockPayrolls)
-    }
-  }, [router, payrolls.length, setStorePayrolls])
+    const fetchPayroll = async () => {
+      try {
+        const res = await fetch("/api/financial/payroll");
+        const json = await res.json();
+        if (json.success) setPayslips(json.data);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPayroll();
+  }, []);
 
-  const handleProcessPayroll = (id: string) => {
-    setPayrolls((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? {
-              ...p,
-              status: "paid" as const,
-              paymentDate: new Date().toISOString().split("T")[0],
-            }
-          : p,
-      ),
-    )
-    message.success("Payroll processed and marked as paid!")
-  }
-
-  const handleDeletePayroll = (id: string) => {
-    if (confirm("Are you sure you want to delete this payroll record?")) {
-      setPayrolls((prev) => prev.filter((p) => p.id !== id))
-      message.success("Payroll record deleted")
-    }
-  }
-
-  const handleCalculateSalary = (breakdown: any) => {
-    console.log("[v0] Salary calculated:", breakdown)
-  }
-
-  const totalPayroll = payrolls.reduce((sum, p) => sum + p.netSalary, 0)
-  const paidPayroll = payrolls.filter((p) => p.status === "paid").reduce((sum, p) => sum + p.netSalary, 0)
-  const pendingPayroll = payrolls.filter((p) => p.status !== "paid").reduce((sum, p) => sum + p.netSalary, 0)
+  if (loading) return <div className="p-10 text-center text-gray-400">Loading payroll data...</div>;
 
   return (
-    <div>
-      <MainNav />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div>
-          <h1 className="text-4xl font-bold text-gray-900">Payroll Management</h1>
-          <p className="text-gray-600 mt-1">Process salaries and manage employee payments</p>
-        </div>
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+       <div className="mb-8">
+           <h1 className="text-3xl font-bold text-slate-900 tracking-tight">My Payroll</h1>
+           <p className="text-slate-500 mt-1">View and download your monthly payslips</p>
+       </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8 mb-6">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="text-sm text-gray-600 mb-2">Total Payroll</div>
-            <div className="text-3xl font-bold text-blue-600">${totalPayroll.toLocaleString()}</div>
-            <div className="text-xs text-gray-500 mt-2">All payroll records</div>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="text-sm text-gray-600 mb-2">Paid</div>
-            <div className="text-3xl font-bold text-green-600">${paidPayroll.toLocaleString()}</div>
-            <div className="text-xs text-gray-500 mt-2">Processed payments</div>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="text-sm text-gray-600 mb-2">Pending</div>
-            <div className="text-3xl font-bold text-amber-600">${pendingPayroll.toLocaleString()}</div>
-            <div className="text-xs text-gray-500 mt-2">Draft & processed</div>
-          </div>
-        </div>
+       {payslips.length === 0 ? (
+           <div className="bg-white p-10 rounded-xl border border-dashed border-gray-300 text-center text-gray-400">
+               No payslips available yet.
+           </div>
+       ) : (
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {payslips.map((slip) => (
+                  <div key={slip.Id} className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition duration-200 overflow-hidden group">
+                      <div className="p-6">
+                          <div className="flex justify-between items-start mb-4">
+                              <div>
+                                  <h3 className="font-bold text-lg text-gray-800">{slip.Month__c} {slip.Year__c}</h3>
+                                  <div className="text-xs text-gray-500 font-medium uppercase tracking-wider mt-1 flex items-center gap-1">
+                                      {slip.Payment_Status__c === 'Paid' ? (
+                                          <><CheckCircle className="w-3 h-3 text-green-500" /> PAID</>
+                                      ) : (
+                                          <><Clock className="w-3 h-3 text-amber-500" /> PENDING</>
+                                      )}
+                                  </div>
+                              </div>
+                              <div className="h-10 w-10 bg-blue-50 rounded-full flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                  <FileText className="w-5 h-5" />
+                              </div>
+                          </div>
 
-        <SalaryCalculator onCalculate={handleCalculateSalary} />
+                          <div className="py-4 border-t border-b border-gray-50 space-y-2">
+                              <div className="flex justify-between text-sm">
+                                  <span className="text-gray-500">Gross Earnings</span>
+                                  <span className="font-medium">₹{slip.Gross_Salary__c?.toLocaleString()}</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                  <span className="text-gray-500">Total Deductions</span>
+                                  <span className="font-medium text-red-500">-₹{slip.Total_Deductions__c?.toLocaleString()}</span>
+                              </div>
+                          </div>
 
-        <div className="mb-6">
-          <BankFileGenerator payrolls={payrolls} />
-        </div>
-
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Payroll Records</h2>
-          <PayrollTable payrolls={payrolls} onProcess={handleProcessPayroll} onDelete={handleDeletePayroll} />
-        </div>
-      </div>
+                          <div className="mt-4 flex justify-between items-end">
+                              <div>
+                                  <div className="text-xs text-gray-400 mb-0.5">Net Pay</div>
+                                  <div className="text-2xl font-bold text-gray-900">₹{slip.Net_Salary__c?.toLocaleString()}</div>
+                              </div>
+                              
+                              {slip.Payslip_URL__c ? (
+                                  <a 
+                                    href={slip.Payslip_URL__c} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="p-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition"
+                                    title="Download PDF"
+                                  >
+                                      <Download className="w-5 h-5" />
+                                  </a>
+                              ) : (
+                                  <button disabled className="p-2 bg-gray-50 text-gray-300 rounded-lg cursor-not-allowed">
+                                      <Download className="w-5 h-5" />
+                                  </button>
+                              )}
+                          </div>
+                      </div>
+                      
+                      {slip.Payment_Date__c && (
+                          <div className="bg-gray-50 px-6 py-2 text-xs text-gray-500 flex justify-between">
+                              <span>Credited on</span>
+                              <span className="font-medium">{slip.Payment_Date__c}</span>
+                          </div>
+                      )}
+                  </div>
+              ))}
+           </div>
+       )}
     </div>
-  )
+  );
 }

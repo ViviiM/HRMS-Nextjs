@@ -7,9 +7,9 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.app',
+  title: 'Vivek M',
+  description: 'Created with Next.js',
+  generator: 'Next.js',
   icons: {
     icon: [
       {
@@ -33,6 +33,9 @@ import AntdStyledRegistry from '@/components/AntdStyledRegistry';
 
 // ...
 
+import { Providers } from './providers';
+import { ClientLayout } from '@/components/ClientLayout';
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -40,8 +43,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`font-sans antialiased`}>
-        <AntdStyledRegistry>{children}</AntdStyledRegistry>
+      <body className={`${_geist.className} antialiased`}>
+        <Providers>
+          <AntdStyledRegistry>
+            <ClientLayout>{children}</ClientLayout>
+          </AntdStyledRegistry>
+        </Providers>
         <Analytics />
       </body>
     </html>

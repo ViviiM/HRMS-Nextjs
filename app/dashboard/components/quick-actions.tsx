@@ -19,7 +19,7 @@ const actions: QuickAction[] = [
   },
   {
     label: "Approve Leave",
-    href: "/leaves",
+    href: "/leaves/approvals",
     icon: CalendarCheck,
     description: "Review pending requests",
     color: "text-blue-600 bg-blue-50",

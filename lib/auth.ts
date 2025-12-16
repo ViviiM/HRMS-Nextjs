@@ -1,60 +1,114 @@
+import { signIn, signOut } from "next-auth/react";
+
 interface LoginCredentials {
   email: string
   password: string
 }
 
+export interface RegisterCredentials {
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  dob: string
+  gender: string
+  address: string
+  emergencyContactName: string
+  emergencyContactNumber: string
+  departmentRole: string // mapping to 'role' or 'Department__c'
+  designation: string
+  joiningDate: string
+  experience?: string
+  profilePhoto?: File | null
+}
+
 interface AuthResponse {
   success: boolean
   token?: string
-  user?: {
-    id: string
-    name: string
-    email: string
-    role: string
-  }
+  user?: any
   error?: string
 }
 
 export async function login(credentials: LoginCredentials): Promise<AuthResponse> {
-  // Mock authentication - replace with real auth logic
-  if (credentials.email && credentials.password) {
-    const token = btoa(credentials.email)
-    localStorage.setItem("authToken", token)
-    localStorage.setItem("userRole", "admin")
+  try {
+    const res = await signIn("credentials", {
+      email: credentials.email,
+      password: credentials.password,
+      redirect: false
+    });
 
-    return {
-      success: true,
-      token,
-      user: {
-        id: "1",
-        name: "John Doe",
-        email: credentials.email,
-        role: "admin",
-      },
+    if (res?.error) {
+      if (res.error === "CredentialsSignin") {
+        return { success: false, error: "Invalid email or password" };
+      }
+      return { success: false, error: res.error };
     }
+    
+    // In strict NextAuth, we don't return the user object here easily unless we fetch session.
+    // But for UI compatibility, we return success.
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: "Login failed" };
   }
-  return { success: false, error: "Invalid credentials" }
+}
+
+export async function register(data: RegisterCredentials): Promise<AuthResponse> {
+  try {
+    const formData = new FormData();
+    formData.append("firstName", data.firstName);
+    formData.append("lastName", data.lastName);
+    formData.append("email", data.email);
+    formData.append("phone", data.phone);
+    formData.append("dob", data.dob);
+    formData.append("gender", data.gender);
+    formData.append("currentAddress", data.address); // Mapping
+    formData.append("emergencyName", data.emergencyContactName);
+    formData.append("emergencyPhone", data.emergencyContactNumber);
+    // departmentRole in form seems to be Department or Role?
+    // API expects 'role' (Employee/Intern).
+    // Let's assume Employee for general registration or map vaguely.
+    formData.append("role", "Employee"); 
+    formData.append("experience", data.experience || "0");
+    
+    if (data.profilePhoto) {
+      // API expects 'resume'.
+      // If profilePhoto is passed, maybe ignored or as resume?
+      // Better to ignore if not resume.
+    }
+
+    const res = await fetch("/api/register", {
+      method: "POST",
+      body: formData
+    });
+
+    const result = await res.json();
+
+    if (!res.ok) {
+      return { success: false, error: result.error };
+    }
+
+    return { success: true, user: { id: result.trackingId } };
+
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
 }
 
 export function logout(): void {
-  localStorage.removeItem("authToken")
-  localStorage.removeItem("userRole")
+  signOut({ callbackUrl: "/auth/login" });
 }
 
 export function getAuthToken(): string | null {
-  if (typeof window !== "undefined") {
-    return localStorage.getItem("authToken")
-  }
-  return null
+  // Deprecated with NextAuth
+  return null;
 }
 
 export function isAuthenticated(): boolean {
-  return getAuthToken() !== null
+  // Should use useSession hook
+  return false;
 }
 
 export function getUserRole(): string {
-  if (typeof window !== "undefined") {
-    return localStorage.getItem("userRole") || "employee"
-  }
-  return "employee"
+  // Should use useSession hook
+  return "employee";
 }

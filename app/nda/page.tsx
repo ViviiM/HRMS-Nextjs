@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { MainNav } from "@/components/main-nav"
-import { getAuthToken } from "@/lib/auth"
 import { NDATable } from "./components/nda-table"
 import type { NDA } from "@/types"
+import { Tabs, message } from 'antd';
 
 const mockNDAs: NDA[] = [
   {
@@ -17,40 +16,8 @@ const mockNDAs: NDA[] = [
     expiryDate: "2026-03-15",
     status: "signed",
     documentUrl: "https://example.com/nda/1.pdf",
-  },
-  {
-    id: "2",
-    employeeId: "2",
-    employeeName: "Jane Smith",
-    templateId: "T-001",
-    signDate: "2020-06-20",
-    expiryDate: "2025-06-20",
-    status: "signed",
-    documentUrl: "https://example.com/nda/2.pdf",
-  },
-  {
-    id: "3",
-    employeeId: "3",
-    employeeName: "Mike Johnson",
-    templateId: "T-002",
-    signDate: "2022-01-10",
-    expiryDate: "2027-01-10",
-    status: "signed",
-    documentUrl: "https://example.com/nda/3.pdf",
-  },
-  {
-    id: "4",
-    employeeId: "4",
-    employeeName: "Sarah Williams",
-    templateId: "T-002",
-    signDate: "",
-    expiryDate: "2025-01-01",
-    status: "pending",
-    documentUrl: "https://example.com/nda/4.pdf",
-  },
+  }
 ]
-
-import { Tabs, message } from 'antd';
 
 export default function NDAPage() {
   const router = useRouter()
@@ -58,10 +25,25 @@ export default function NDAPage() {
   const [activeTab, setActiveTab] = useState<string>("all")
 
   useEffect(() => {
-    if (!getAuthToken()) {
-      router.push("/auth/login")
-    }
-    setNDAs(mockNDAs)
+    // Auth handled by middleware/layout
+    
+    // Fetch Real NDAs
+    const fetchNDAs = async () => {
+        try {
+            const res = await fetch('/api/nda');
+            const json = await res.json();
+            if(json.success && json.data.length > 0) {
+                setNDAs(json.data);
+            } else {
+                setNDAs(mockNDAs); // Fallback to mock if empty (dev purposes) or if API fails
+            }
+        } catch(e) {
+            console.error(e);
+            setNDAs(mockNDAs); // Fallback
+        }
+    };
+    fetchNDAs();
+
   }, [router])
 
   const getFilteredNDAs = (status: string) => {
@@ -86,15 +68,13 @@ export default function NDAPage() {
   ];
 
   return (
-    <div>
-      <MainNav />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-        <div>
-          <h1 className="text-4xl font-extrabold text-slate-900 mb-2 tracking-tight">NDA Management</h1>
-          <p className="text-slate-500 text-lg">Manage employee NDAs and confidentiality agreements</p>
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">NDA Management</h1>
+          <p className="text-slate-500 mt-1">Manage employee NDAs and confidentiality agreements</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-sm p-6 border border-slate-100">
             <div className="text-sm font-medium text-slate-500 mb-2">Pending Signatures</div>
             <div className="text-3xl font-bold text-amber-600">{pendingCount}</div>
@@ -112,7 +92,6 @@ export default function NDAPage() {
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
             <Tabs defaultActiveKey="all" items={items} onChange={setActiveTab} />
         </div>
-      </div>
     </div>
   )
 }

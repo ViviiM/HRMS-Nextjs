@@ -2,13 +2,12 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { MainNav } from "@/components/main-nav"
-import { getAuthToken } from "@/lib/auth"
 import { TrainingList } from "./components/training-list"
 import { TrainingDetail } from "./components/training-detail"
 import { ProgressCard } from "./components/progress-card"
 import { useTrainingStore } from "@/store/trainingStore"
 import type { Training, TrainingEnrollment } from "@/types"
+import { Tabs, message } from 'antd';
 
 const mockTrainings: Training[] = [
   {
@@ -37,71 +36,45 @@ const mockTrainings: Training[] = [
     enrolledCount: 22,
     status: "ongoing",
   },
-  {
-    id: "3",
-    title: "Data Analysis with Python",
-    description: "Comprehensive guide to data analysis using Python and pandas",
-    category: "Data Science",
-    instructor: "Emma Davis",
-    startDate: "2024-09-01",
-    endDate: "2024-09-20",
-    duration: 24,
-    maxParticipants: 20,
-    enrolledCount: 18,
-    status: "scheduled",
-  },
-  {
-    id: "4",
-    title: "Leadership and Communication",
-    description: "Develop leadership skills and improve communication effectiveness",
-    category: "Professional Development",
-    instructor: "Michael Brown",
-    startDate: "2024-06-15",
-    endDate: "2024-07-15",
-    duration: 12,
-    maxParticipants: 35,
-    enrolledCount: 35,
-    status: "completed",
-  },
 ]
 
 const mockEnrollments: TrainingEnrollment[] = [
-  {
-    id: "e1",
-    trainingId: "4",
-    employeeId: "current",
-    enrollmentDate: "2024-06-15",
-    completionDate: "2024-07-15",
-    score: 92,
-    status: "completed",
-  },
-  {
-    id: "e2",
-    trainingId: "2",
-    employeeId: "current",
-    enrollmentDate: "2024-07-20",
-    status: "enrolled",
-  },
+    {
+      id: "e1",
+      trainingId: "1",
+      employeeId: "current",
+      enrollmentDate: "2024-06-15",
+      status: "completed",
+    }
 ]
-
-import { Tabs, message } from 'antd';
-
-// ... (keep logic up to imports)
 
 export default function TrainingPage() {
   const router = useRouter()
   const [selectedTraining, setSelectedTraining] = useState<Training | null>(null)
+  
   const { trainings, enrollments, setTrainings, setEnrollments, enrollEmployee } = useTrainingStore()
 
   useEffect(() => {
-    if (!getAuthToken()) {
-      router.push("/auth/login")
-    }
-    if (trainings.length === 0) {
-      setTrainings(mockTrainings)
-      setEnrollments(mockEnrollments)
-    }
-  }, [router, trainings.length, setTrainings, setEnrollments])
+    // Fetch Trainings Real
+    const fetchTrainings = async () => {
+        try {
+            const res = await fetch('/api/training');
+            const json = await res.json();
+            if(json.success && json.data.length > 0) {
+                 setTrainings(json.data);
+                 setEnrollments(mockEnrollments); 
+            } else {
+                 setTrainings(mockTrainings);
+                 setEnrollments(mockEnrollments);
+            }
+        } catch(e) {
+            setTrainings(mockTrainings);
+            setEnrollments(mockEnrollments);
+        }
+    };
+    fetchTrainings();
+
+  }, [setTrainings, setEnrollments])
 
   const handleEnroll = (trainingId: string) => {
     const newEnrollment: TrainingEnrollment = {
@@ -152,15 +125,13 @@ export default function TrainingPage() {
   ];
 
   return (
-    <div>
-      <MainNav />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-        <div>
-          <h1 className="text-4xl font-extrabold text-slate-900 mb-2 tracking-tight">Training & Development</h1>
-          <p className="text-slate-500 text-lg">Enhance your skills with our training programs</p>
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Training & Development</h1>
+          <p className="text-slate-500 mt-1">Enhance your skills with our training programs</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-slate-100 mb-6 mt-8 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
            <Tabs defaultActiveKey="available" items={items} />
         </div>
 
@@ -171,7 +142,6 @@ export default function TrainingPage() {
             onEnroll={handleEnroll}
           />
         )}
-      </div>
     </div>
   )
 }
