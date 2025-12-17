@@ -96,9 +96,11 @@ export default function LandingPage() {
 
             <FadeIn delay={0.3}>
               <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                 <Link href="/dashboard" className="w-full sm:w-auto">
                  <button className="px-8 py-4 rounded-full text-lg font-bold btn-gradient shadow-xl hover:shadow-2xl transition transform hover:-translate-y-1 w-full sm:w-auto">
                     Get Started Now
                  </button>
+                 </Link>
                  <button className="px-8 py-4 rounded-full text-lg font-bold bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 transition w-full sm:w-auto">
                     Book a Demo
                  </button>

@@ -16,7 +16,13 @@ export default withAuth(
   },
   {
     callbacks: {
-      authorized: ({ token }) => !!token,
+    authorized: ({ token, req }) => {
+        const path = req.nextUrl.pathname;
+        if (path === '/') {
+            return true;
+        }
+        return !!token;
+      },
     },
     pages: {
         signIn: '/auth/login',
