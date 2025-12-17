@@ -25,7 +25,7 @@ export async function PUT(
       );
     }
 
-    const conn = getSalesforceConnection();
+    // const conn = getSalesforceConnection();
 
     // Fetch current leave record
     const soql = `SELECT Id, Employee__c, Contact__r.FirstName, Contact__r.LastName, Contact__r.Email,

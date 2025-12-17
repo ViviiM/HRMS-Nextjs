@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSalesforceConnection, queryRecords, updateRecordInSalesforce } from '@/lib/salesforce';
+import { getSalesforceConnection, queryRecords, updateRecordInSalesforce, SF_OBJECTS } from '@/lib/salesforce';
 import { sendEmail } from '@/lib/email';
 
 export async function PUT(
@@ -18,7 +18,7 @@ export async function PUT(
       );
     }
 
-    const conn = getSalesforceConnection();
+    // const conn = getSalesforceConnection();
 
     // Fetch current leave record
     const soql = `SELECT Id, Employee__c, Contact__r.FirstName, Contact__r.LastName, Contact__r.Email,
@@ -44,18 +44,29 @@ export async function PUT(
     }
 
     // Refund leave balance
-    const leaveBalanceSOQL = `SELECT Id FROM LeaveBalance__c WHERE Employee__c = '${leave.Employee__c}'`;
+    const leaveBalanceSOQL = `SELECT Id, Annual_Leave__c, Casual_Balance__c, Sick_Balance__c, Earned_Balance__c FROM ${SF_OBJECTS.LEAVE_BALANCE} WHERE Employee__c = '${leave.Employee__c}'`;
     const balanceRecords = await queryRecords<any>(leaveBalanceSOQL);
 
     if (balanceRecords && balanceRecords.length > 0) {
-      const leaveType = (leave.LeaveType__c as string)?.replace(/\s+/g, '_');
-      const balanceField = leaveType === 'Annual' ? 'Annual_Leave__c' : 
-                          leaveType === 'Casual' ? 'Casual_Leave__c' :
-                          leaveType === 'Sick' ? 'Sick_Leave__c' : 'Earned_Leave__c';
+      const balance = balanceRecords[0];
+      const leaveType = leave.LeaveType__c;
+      const totalDays = leave.TotalDays__c || 0;
+      
+      let updatePayload: any = {};
+      
+      if (leaveType === 'Casual') {
+         updatePayload['Casual_Balance__c'] = (balance.Casual_Balance__c || 0) + totalDays;
+      } else if (leaveType === 'Sick') {
+         updatePayload['Sick_Balance__c'] = (balance.Sick_Balance__c || 0) + totalDays;
+      } else if (leaveType === 'Earned' || leaveType === 'Privilege') {
+         updatePayload['Earned_Balance__c'] = (balance.Earned_Balance__c || 0) + totalDays;
+      } else if (leaveType === 'Annual') {
+         updatePayload['Annual_Leave__c'] = (balance.Annual_Leave__c || 0) + totalDays;
+      }
 
-      await updateRecordInSalesforce('LeaveBalance__c', balanceRecords[0].Id, {
-        [balanceField]: `${balanceField} + ${leave.TotalDays__c}`
-      });
+      if (Object.keys(updatePayload).length > 0) {
+         await updateRecordInSalesforce(SF_OBJECTS.LEAVE_BALANCE, balance.Id, updatePayload);
+      }
     }
 
     // Update leave record
