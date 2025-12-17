@@ -47,7 +47,7 @@ export async function GET(req: NextRequest): Promise<NextResponse<any>> {
     if (search) {
       const escapedSearch = escapeSOQL(search);
       conditions.push(
-        `(FirstName LIKE '%${escapedSearch}%' OR LastName LIKE '%${escapedSearch}%' OR Email LIKE '%${escapedSearch}%')`
+        `(Name LIKE '%${escapedSearch}%' OR Contact__r.Email as email LIKE '%${escapedSearch}%')`
       );
     }
 
@@ -56,14 +56,12 @@ export async function GET(req: NextRequest): Promise<NextResponse<any>> {
       "Id",
       "Employee_ID__c",
       "Contact__c",
-      "FirstName",
-      "LastName",
-      "Email",
-      "Phone",
+      "Name",
+      "Contact__r.Email",
       "Department__c",
       "Role__c",
       "Status__c",
-      "Join_Date__c",
+      "Joining_Date__c",
       "Base_Salary__c",
       "Profile_Photo_URL__c",
       "Team_Lead__c"
@@ -72,12 +70,11 @@ export async function GET(req: NextRequest): Promise<NextResponse<any>> {
     const offset = (page - 1) * pageSize;
 
     let query = `SELECT ${fields.join(", ")} FROM ${SF_OBJECTS.EMPLOYEE}`;
-
     if (conditions.length > 0) {
       query += ` WHERE ${conditions.join(" AND ")}`;
     }
 
-    query += ` ORDER BY FirstName ASC LIMIT ${pageSize} OFFSET ${offset}`;
+    // query += ` ORDER BY FirstName ASC LIMIT ${pageSize} OFFSET ${offset}`;
 
     // Get total count
     const countQuery = `SELECT COUNT() FROM ${SF_OBJECTS.EMPLOYEE}${
@@ -92,9 +89,9 @@ export async function GET(req: NextRequest): Promise<NextResponse<any>> {
       Id: record.Id,
       EmployeeId: record.Employee_ID__c,
       ContactId: record.Contact__c,
-      FirstName: record.FirstName,
-      LastName: record.LastName,
-      Email: record.Email,
+      FirstName: record.Name,
+      LastName: record.Name,
+      Email: record.Contact__r.Email,
       Phone: record.Phone,
       Department: record.Department__c,
       Role: record.Role__c,

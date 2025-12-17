@@ -11,6 +11,7 @@ export default function LeaveApplyForm({ onSuccess }: { onSuccess?: () => void }
   const { register, handleSubmit, formState: { errors } } = useForm();
   
   const onSubmit = async (data: any) => {
+    console.log("Submit", data);
     setLoading(true);
     try {
       const res = await fetch("/api/leaves", {

@@ -23,8 +23,20 @@ export default function LeaveHistory({ refreshTrigger }: { refreshTrigger: numbe
       try {
         const res = await fetch("/api/leaves");
         const json = await res.json();
+        console.log('Leave History', json);
+
         if (json.success) {
-           setLeaves(json.data);
+          const formattedLeaves = json.data.map((item: any) => ({
+            id: item.Id,
+            type: item.LeaveType,
+            startDate: item.StartDate,
+            endDate: item.EndDate,
+            // Assuming TotalDays is a number, or needs calculation if null
+            days: item.TotalDays === null ? 0 : item.TotalDays, // Or calculate diff between StartDate and EndDate
+            status: item.Status,
+            reason: item.Reason,
+          }));
+          setLeaves(formattedLeaves);
         }
       } catch (e) {
         console.error(e);

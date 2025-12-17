@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
      const pendingRes = await conn.query("SELECT count(Id) cnt FROM Leave__c WHERE Status__c = 'Applied'");
      const pendingApprovals = pendingRes.records[0].cnt;
 
-     const assetsRes = await conn.query("SELECT count(Id) cnt FROM Asset__c WHERE Status__c = 'Available'");
+     const assetsRes = await conn.query("SELECT count(Id) cnt FROM Asset WHERE Status = 'Available'");
      const availableAssets = assetsRes.records[0].cnt;
 
      return NextResponse.json({

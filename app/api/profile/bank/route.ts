@@ -13,27 +13,25 @@ export async function GET(req: NextRequest) {
      // 1. Get Employee ID (SF ID)
      let sfId = (session.user as any).sfId;
      if (!sfId) {
-        const emp = await conn.query(`SELECT Id FROM Employee__c WHERE Company_Email__c = '${session.user.email}' LIMIT 1`);
+        const emp = await conn.query(`SELECT Id FROM Employee__c WHERE Contact__r.Email = '${session.user.email}' LIMIT 1`);
         sfId = emp.records[0]?.Id;
      }
      
-     if(!sfId) return NextResponse.json({ data: null });
-
      // 2. Fetch Bank Details
      const q = `
-       SELECT Id, Bank_Name__c, Account_Number__c, IFSC_Code__c, Account_Holder_Name__c, Pan_Number__c
+       SELECT Id, Name, Bank_Account_Number__c, IFSC__c,Bank_Branch_Name__c, Pan_Number__c
        FROM Bank_Details__c
        WHERE Employee__c = '${sfId}'
        LIMIT 1
      `;
-     
      const result = await conn.query(q);
-     
+     console.log(result);
      if (result.totalSize === 0) return NextResponse.json({ success: true, data: null });
      
      return NextResponse.json({ success: true, data: result.records[0] });
 
   } catch (error: any) {
+    console.log(error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -48,20 +46,19 @@ export async function POST(req: NextRequest) {
      
      let sfId = (session.user as any).sfId;
      if (!sfId) {
-        const emp = await conn.query(`SELECT Id FROM Employee__c WHERE Company_Email__c = '${session.user.email}' LIMIT 1`);
+        const emp = await conn.query(`SELECT Id FROM Employee__c WHERE Contact__r.Email = '${session.user.email}' LIMIT 1`);
         sfId = emp.records[0]?.Id;
      }
-
      // Upsert logic: Check if exists, update; else create.
      // For simplicity, query first.
      const check = await conn.query(`SELECT Id FROM Bank_Details__c WHERE Employee__c = '${sfId}' LIMIT 1`);
      
      const record = {
          Employee__c: sfId,
-         Bank_Name__c: data.bankName,
-         Account_Number__c: data.accountNumber,
-         IFSC_Code__c: data.ifsc,
-         Account_Holder_Name__c: data.holderName,
+         Name: data.bankName,
+         Bank_Account_Number__c: data.accountNumber,
+         IFSC__c: data.ifsc,
+         Bank_Branch_Name__c: data.holderName,
          Pan_Number__c: data.pan
      };
 

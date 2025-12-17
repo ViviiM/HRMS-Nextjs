@@ -33,12 +33,18 @@ export default function DashboardPage() {
     // }
     
     fetch('/api/dashboard/stats')
-        .then(res => res.json())
+        .then(res => {
+          return res.json()
+        })
         .then(data => {
+          console.log(data);
             if(data.success) setStats(data.data);
             setLoading(false);
         })
-        .catch(err => setLoading(false));
+        .catch(err => {
+            setLoading(false);
+            console.log(err);
+        });
 
   }, [router])
 

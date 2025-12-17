@@ -26,7 +26,7 @@ export async function GET(req: NextRequest): Promise<NextResponse<any>> {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
     const leaveType = searchParams.get("leaveType");
-    const employeeId = searchParams.get("employeeId");
+    const employeeId = searchParams.get("employeeId") || session?.user?.sfId;
     const page = parseInt(searchParams.get("page") || "1");
     const pageSize = parseInt(searchParams.get("pageSize") || "10");
 
@@ -136,7 +136,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<a
 
   try {
     const body = await req.json();
-    const {
+    let {
       employeeId,
       leaveType,
       startDate,
@@ -147,8 +147,14 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<a
       onePlusTwo
     } = body;
 
+    // Dynamically set employeeId from session if not provided
+    if (!employeeId && session?.user?.sfId) {
+      employeeId = session.user.sfId;
+    }
+
     // Validation
     if (!employeeId || !leaveType || !startDate || !endDate || !reason) {
+      console.log("Missing required fields" , employeeId, leaveType, startDate, endDate, reason);
       return NextResponse.json(
         { success: false, error: "Missing required fields", statusCode: 400 },
         { status: 400 }
@@ -165,12 +171,12 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<a
 
     const conn = await getSalesforceConnection();
     const balanceResult = await conn.query(leaveBalanceQuery);
-
     if (balanceResult.totalSize === 0) {
-      return NextResponse.json(
-        { success: false, error: "Leave balance not found", statusCode: 404 },
-        { status: 404 }
-      );
+      console.log("Leave balance not found");
+      // return NextResponse.json(
+      //   { success: false, error: "Leave balance not found", statusCode: 404 },
+      //   { status: 404 }
+      // );
     }
 
     const leaveRecord: SFLeave = {

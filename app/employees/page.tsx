@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { Search, Mail, Phone, Briefcase } from "lucide-react";
 
 import { Input as AntInput, Select as AntSelect, Card, Avatar as AntAvatar, Tag, Row, Col } from "antd";
-const { Meta } = Card;
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<any[]>([]);
@@ -17,6 +16,7 @@ export default function EmployeesPage() {
       try {
         const res = await fetch("/api/employees");
         const json = await res.json();
+        console.log(json)
         if (json.success) setEmployees(json.data);
       } catch (e) { console.error(e); } 
       finally { setLoading(false); }
@@ -25,9 +25,9 @@ export default function EmployeesPage() {
   }, []);
 
   const filtered = employees.filter(emp => {
-      const matchesSearch = emp.name.toLowerCase().includes(search.toLowerCase()) || 
-                            emp.email.toLowerCase().includes(search.toLowerCase());
-      const matchesDept = deptFilter === "All" || emp.department === deptFilter;
+      const matchesSearch = emp.FirstName.toLowerCase().includes(search.toLowerCase()) || 
+                            emp.Email.toLowerCase().includes(search.toLowerCase());
+      const matchesDept = deptFilter === "All" || emp.Department.toLowerCase() === deptFilter.toLowerCase();
       return matchesSearch && matchesDept;
   });
 
@@ -69,21 +69,21 @@ export default function EmployeesPage() {
                       <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-br from-blue-50 to-indigo-50 group-hover:from-blue-100 group-hover:to-indigo-100 transition-colors"></div>
                       <div className="flex flex-col items-center p-4 relative pt-12">
                           <AntAvatar src={emp.photo} size={80} className="mb-4 bg-white text-blue-600 text-2xl font-bold border-4 border-white shadow-sm">
-                              {emp.name[0]}
+                              {emp.FirstName[0]}
                           </AntAvatar>
-                          <h3 className="font-bold text-slate-800 text-lg mb-1">{emp.name}</h3>
-                          <div className="text-cyan-600 font-bold text-xs uppercase tracking-wider mb-2">{emp.role}</div>
-                          <Tag className="mb-6 rounded-full px-3">{emp.department}</Tag>
+                          <h3 className="font-bold text-slate-800 text-lg mb-1">{emp.FirstName}</h3>
+                          <div className="text-cyan-600 font-bold text-xs uppercase tracking-wider mb-2">{emp.Role}</div>
+                          <Tag className="mb-6 rounded-full px-3">{emp.Department}</Tag>
                           
                           <div className="w-full space-y-3 pt-2">
                               <div className="flex items-center gap-3 text-sm text-slate-600 bg-slate-50 p-2 rounded-lg">
                                   <Mail className="w-4 h-4 text-slate-400 shrink-0" />
-                                  <a href={`mailto:${emp.email}`} className="hover:text-blue-600 truncate">{emp.email}</a>
+                                  <a href={`mailto:${emp.Email}`} className="hover:text-blue-600 truncate">{emp.Email}</a>
                               </div>
                               {emp.phone && (
                                   <div className="flex items-center gap-3 text-sm text-slate-600 bg-slate-50 p-2 rounded-lg">
                                       <Phone className="w-4 h-4 text-slate-400 shrink-0" />
-                                      {emp.phone}
+                                      {emp.Phone}
                                   </div>
                               )}
                           </div>

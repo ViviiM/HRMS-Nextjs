@@ -33,9 +33,7 @@ export async function GET(req: NextRequest) {
       SELECT 
         Id, Name, Employee_ID__c, Company_Email__c, Department__c, Role__c, 
         Joining_Date__c, Status__c, Profile_Photo_URL__c, Team_Lead__r.Name,
-        Contact__r.FirstName, Contact__r.LastName, Contact__r.Email, Contact__r.Phone, 
-        Contact__r.Date_of_Birth__c, Contact__r.Gender__c, Contact__r.MailingAddress,
-        Contact__r.Emergency_Contact_Name__c, Contact__r.Emergency_Contact_Number__c
+        Contact__r.FirstName, Contact__r.LastName, Contact__r.Email, Contact__r.Phone
       FROM Employee__c 
       WHERE Company_Email__c = '${email}' 
       LIMIT 1

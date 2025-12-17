@@ -17,11 +17,11 @@ export default function BankDetailsTab() {
             const res = await fetch("/api/profile/bank");
             const json = await res.json();
             if (json.success && json.data) {
-                setValue("bankName", json.data.Bank_Name__c);
-                setValue("accountNumber", json.data.Account_Number__c);
-                setValue("ifsc", json.data.IFSC_Code__c);
-                setValue("holderName", json.data.Account_Holder_Name__c);
-                setValue("pan", json.data.Pan_Number__c);
+                setValue("bankName", json.data.Name);
+                setValue("accountNumber", json.data.Bank_Account_Number__c);
+                setValue("ifsc", json.data.IFSC__c);
+                setValue("holderName", json.data.Bank_Branch_Name__c);
+                setValue("pan", json.data.PAN_Number__c);
             }
         } catch(e) { console.error(e); } 
         finally { setLoading(false); }
