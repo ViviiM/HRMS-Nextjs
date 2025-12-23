@@ -56,8 +56,8 @@ export async function POST(req: NextRequest) {
      // 1. Upload to S3
      const arrayBuffer = await file.arrayBuffer();
      const buffer = Buffer.from(arrayBuffer);
-     const key = `documents/${sfId}/${uuidv4()}-${file.name}`;
-     const s3Url = await uploadToS3(buffer, key, file.type);
+     // const key = `documents/${sfId}/${uuidv4()}-${file.name}`; // Generated in lib/s3
+     const { url: s3Url } = await uploadToS3(buffer, file.name, "documents", file.type);
      
      // 2. Create Salesforce Record
      const docRecord = {

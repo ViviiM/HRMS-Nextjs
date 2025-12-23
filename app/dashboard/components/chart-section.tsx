@@ -16,29 +16,11 @@ import {
   ResponsiveContainer,
 } from "recharts"
 
-const departmentData = [
-  { name: "Engineering", employees: 45, budget: 450000 },
-  { name: "Sales", employees: 38, budget: 320000 },
-  { name: "HR", employees: 12, budget: 120000 },
-  { name: "Marketing", employees: 20, budget: 180000 },
-  { name: "Finance", employees: 15, budget: 150000 },
-  { name: "Support", employees: 25, budget: 200000 },
-]
-
-const leaveData = [
-  { month: "Jan", approved: 24, pending: 5, rejected: 2 },
-  { month: "Feb", approved: 28, pending: 3, rejected: 1 },
-  { month: "Mar", approved: 32, pending: 4, rejected: 2 },
-  { month: "Apr", approved: 26, pending: 6, rejected: 3 },
-  { month: "May", approved: 30, pending: 2, rejected: 1 },
-  { month: "Jun", approved: 35, pending: 5, rejected: 2 },
-]
-
-const trainingData = [
-  { name: "Completed", value: 156, fill: "#0891b2" }, // Cyan-600
-  { name: "In Progress", value: 42, fill: "#2563eb" }, // Blue-600
-  { name: "Pending", value: 18, fill: "#f59e0b" },    // Amber-500
-]
+interface ChartSectionProps {
+  departmentData: any[];
+  leaveData: any[];
+  trainingData: any[];
+}
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -56,7 +38,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-export function ChartSection() {
+export function ChartSection({ departmentData, leaveData, trainingData }: ChartSectionProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
       {/* Employees by Department */}
@@ -110,7 +92,7 @@ export function ChartSection() {
               paddingAngle={5}
               dataKey="value"
             >
-              {trainingData.map((entry, index) => (
+              {trainingData.map((entry: any, index: number) => (
                 <Cell key={`cell-${index}`} fill={entry.fill} strokeWidth={0} />
               ))}
             </Pie>
@@ -124,20 +106,23 @@ export function ChartSection() {
       <div className="glass-card bg-white/60 border border-white/60 rounded-2xl p-6 shadow-sm flex flex-col">
         <h3 className="text-lg font-bold text-gray-800 mb-6">Budget by Department</h3>
         <div className="space-y-5 flex-1 overflow-auto pr-2 custom-scrollbar">
-          {departmentData.map((dept) => (
-            <div key={dept.name}>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-semibold text-gray-700">{dept.name}</span>
-                <span className="text-sm font-bold text-gray-900">${(dept.budget / 1000).toFixed(0)}K</span>
-              </div>
-              <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-cyan-500 to-blue-600 rounded-full"
-                  style={{ width: `${(dept.budget / 450000) * 100}%` }}
-                ></div>
-              </div>
-            </div>
-          ))}
+          {departmentData.map((dept: any) => {
+              const maxBudget = Math.max(...departmentData.map((d: any) => d.budget || 0), 1);
+              return (
+                <div key={dept.name}>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-semibold text-gray-700">{dept.name}</span>
+                    <span className="text-sm font-bold text-gray-900">${((dept.budget || 0) / 1000).toFixed(0)}K</span>
+                  </div>
+                  <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-cyan-500 to-blue-600 rounded-full"
+                      style={{ width: `${Math.min(((dept.budget || 0) / maxBudget) * 100, 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
+              );
+          })}
         </div>
       </div>
     </div>

@@ -25,7 +25,7 @@ export function Header({ setSidebarOpen }: HeaderProps) {
            </button>
            
            {/* Search Bar - Hidden on small screens */}
-           <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-white rounded-full border border-slate-200 focus-within:ring-2 focus-within:ring-cyan-500/20 focus-within:border-cyan-500 transition-all shadow-sm w-96">
+           <div id="tour-search-bar" className="hidden md:flex items-center gap-2 px-4 py-2 bg-white rounded-full border border-slate-200 focus-within:ring-2 focus-within:ring-cyan-500/20 focus-within:border-cyan-500 transition-all shadow-sm w-96">
                <Search className="w-4 h-4 text-slate-400" />
                <input 
                   type="text" 
@@ -40,7 +40,7 @@ export function Header({ setSidebarOpen }: HeaderProps) {
 
        <div className="flex items-center gap-4 sm:gap-6">
            {/* Notifications */}
-           <button className="relative p-2 rounded-full text-slate-500 hover:bg-white hover:text-cyan-600 hover:shadow-md transition-all">
+           <button id="tour-notifications" className="relative p-2 rounded-full text-slate-500 hover:bg-white hover:text-cyan-600 hover:shadow-md transition-all">
                <Bell className="w-5 h-5" />
                <span className="absolute top-1.5 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-slate-50"></span>
            </button>
@@ -49,7 +49,7 @@ export function Header({ setSidebarOpen }: HeaderProps) {
            <div className="h-8 w-px bg-slate-200 hidden sm:block"></div>
 
            {/* User Profile */}
-           <div className="relative">
+           <div id="tour-profile" className="relative">
                <button 
                   onClick={() => setProfileOpen(!profileOpen)}
                   className="flex items-center gap-3 p-1 pl-2 pr-4 rounded-full bg-white border border-slate-200 shadow-sm hover:shadow-md transition-all"

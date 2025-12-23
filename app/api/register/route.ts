@@ -61,32 +61,12 @@ export async function POST(req: NextRequest) {
     // }
 
     // ============================================
-    // 3. UPLOAD PROFILE PHOTO TO S3
+    // 3. UPLOAD PROFILE PHOTO TO S3 - (REMOVED: Handled in Profile after registration)
     // ============================================
-    let profilePhotoUrl = "";
-    if (profilePhotoFile && profilePhotoFile.size > 0) {
-      try {
-        const fileBuffer = Buffer.from(await profilePhotoFile.arrayBuffer());
-        const fileName = `profile-photos/${uuidv4()}-${profilePhotoFile.name.replace(/\s+/g, '-')}`;
-
-        await s3Client.send(
-          new PutObjectCommand({
-            Bucket: S3_BUCKET_NAME,
-            Key: fileName,
-            Body: fileBuffer,
-            ContentType: profilePhotoFile.type,
-            // ACL: 'public-read' // Use if bucket is public, else use signed URL or rely on bucket policy
-          })
-        );
-        
-        // Construct Public URL
-        profilePhotoUrl = `https://${S3_BUCKET_NAME}.s3.amazonaws.com/${fileName}`;
-      } catch (error) {
-        console.error("Profile photo upload error:", error);
-        // Continue without photo if fails or return error? "profile photo i.e s3url" required.
-        // Assuming we can proceed or warn. I'll proceed keeping it empty if fail, or error.
-      }
-    }
+    const profilePhotoUrl = ""; 
+    // if (profilePhotoFile && profilePhotoFile.size > 0) {
+    //   // Previously implemented S3 Upload here
+    // }
 
     // ============================================
     // 4. CREATE CONTACT RECORD

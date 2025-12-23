@@ -47,7 +47,7 @@ export const SF_OBJECTS = {
   PAYROLL_SUMMARY: 'Payroll_Summary__c',
   
   // Asset Management
-  ASSET: 'Asset__c',
+  ASSET: 'Asset',
   ASSET_ASSIGNMENT: 'Asset_Assignment__c',
   
   // NDA & Templates
@@ -60,7 +60,8 @@ export const SF_OBJECTS = {
   AUDIT_LOG: 'Audit_Log__c',
   
   // Notifications
-  NOTIFICATION: 'Notification__c'
+  NOTIFICATION: 'Notification__c',
+  HOLIDAY: 'Holiday__c'
 } as const;
 
 // ============================================
@@ -411,4 +412,32 @@ export function buildSOQLQuery(
 
 export function escapeSOQL(value: string): string {
   return value.replace(/'/g, "\\'");
+}
+
+export async function executeCompositeRequest(
+  subrequests: { method: string; url: string; referenceId: string; body?: any }[]
+): Promise<any> {
+  const conn = await getSalesforceConnection();
+  
+  // Construct the composite request body
+  const requestBody = {
+    allOrNone: false,
+    compositeRequest: subrequests.map(req => ({
+      method: req.method,
+      url: req.url,
+      referenceId: req.referenceId,
+      body: req.body
+    }))
+  };
+
+  // Use the generic request method since jsforce might not have a dedicated composite method exposed directly on Connection 
+  // depending on version, or it's cleaner to use requestPost for custom endpoints.
+  // The endpoint for composite is /services/data/vXX.X/composite
+  // jsforce connection provides 'version' property.
+  
+  const apiVersion = conn.version || '58.0';
+  const url = `/services/data/v${apiVersion}/composite`;
+  
+  const result = await conn.requestPost(url, requestBody);
+  return result;
 }

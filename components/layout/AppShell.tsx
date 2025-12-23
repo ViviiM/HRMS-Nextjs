@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Sidebar } from "./Sidebar"
 import { Header } from "./Header"
 import { usePathname } from "next/navigation"
+import { TourGuide } from "@/components/TourGuide"
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -25,6 +26,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+      <TourGuide />
     </div>
   )
 }

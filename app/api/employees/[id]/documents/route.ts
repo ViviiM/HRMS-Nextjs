@@ -48,11 +48,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // Decode base64
     const buffer = Buffer.from(fileBase64, 'base64');
-    const timestamp = Date.now();
-    const key = `documents/${employeeId}/${timestamp}_${fileName}`;
-
     // Upload to S3
-    const fileUrl = await uploadToS3(buffer, key, contentType);
+    const { url: fileUrl, key } = await uploadToS3(buffer, fileName, 'documents', contentType);
 
     // Create Salesforce Document record
     const documentRecord = {

@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const sfId = (session.user as any).sfId;
 
   // Only TL or HR/Admin can approve
-  const isApprover = ['Manager', 'TL', 'HR', 'Admin'].includes(role);
+  const isApprover = ['Manager', 'TL', 'HR', 'Admin' , 'Employee'].includes(role);
   if (!isApprover) {
       return NextResponse.json({ error: "Forbidden: Approver Access Only" }, { status: 403 });
   }
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
          // Let's assume queue: Status = 'TL Approved'
          // Also allow 'Applied' if they want to override? 
          // For stricter filtering:
-         q += ` WHERE Status__c IN ('TL Approved', 'Pending')`; // 'Pending' might be 'Applied'
+         q += ` WHERE Status__c IN ('TL Approved', 'Pending' , 'Applied')`; // 'Pending' might be 'Applied'
     } else {
          // TL sees items from their team where Status = 'Applied'
          q += ` WHERE Employee__r.Team_Lead__c = '${sfId}' AND Status__c = 'Applied'`;
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
   const role = (session.user as any).role;
   // const sfApproverId = (session.user as any).sfId;
 
-  const isApprover = ['Manager', 'TL', 'HR', 'Admin'].includes(role);
+  const isApprover = ['Manager', 'TL', 'HR', 'Admin' , 'Employee'].includes(role);
   if (!isApprover) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

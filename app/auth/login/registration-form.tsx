@@ -51,14 +51,14 @@ const registrationSchema = z.object({
   lastName: z.string().min(2, "Last name is required"),
   email: z.string().email("Invalid email address"),
   address: z.string().min(5, "Address is required"),
-  profilePhoto: z
-    .any()
-    .optional()
-    .refine((files) => !files || files.length === 0 || files[0]?.size <= MAX_FILE_SIZE, `Max file size is 5MB.`)
-    .refine(
-      (files) => !files || files.length === 0 || ACCEPTED_IMAGE_TYPES.includes(files?.[0]?.type),
-      ".jpg, .jpeg, .png and .webp files are accepted."
-    ),
+  // profilePhoto: z
+  //   .any()
+  //   .optional()
+  //   .refine((files) => !files || files.length === 0 || files[0]?.size <= MAX_FILE_SIZE, `Max file size is 5MB.`)
+  //   .refine(
+  //     (files) => !files || files.length === 0 || ACCEPTED_IMAGE_TYPES.includes(files?.[0]?.type),
+  //     ".jpg, .jpeg, .png and .webp files are accepted."
+  //   ),
 })
 
 type RegistrationSchema = z.infer<typeof registrationSchema>
@@ -102,9 +102,9 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
       formData.append("lastName", data.lastName)
       formData.append("email", data.email)
       formData.append("address", data.address)
-      if (data.profilePhoto?.[0]) {
-        formData.append("profilePhoto", data.profilePhoto[0])
-      }
+      // if (data.profilePhoto?.[0]) {
+      //   formData.append("profilePhoto", data.profilePhoto[0])
+      // }
 
       const res = await fetch("/api/register", {
         method: "POST",
@@ -171,7 +171,7 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
                 />
             </div>
 
-            <div className="relative group">
+            {/* <div className="relative group">
                 <label htmlFor="profilePhoto" className={labelClasses}>Profile Photo</label>
                 <div className="mt-1 flex justify-center px-6 py-6 border-2 border-dashed border-blue-200 rounded-xl hover:bg-blue-50/50 transition bg-white/40 backdrop-blur-sm group-hover:border-blue-400 cursor-pointer relative overflow-hidden">
                     <div className="space-y-2 text-center relative z-10">
@@ -188,7 +188,7 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
                         <p className="text-xs text-gray-400">PNG, JPG up to 5MB</p>
                     </div>
                 </div>
-            </div>
+            </div> */}
 
             <button
                 type="submit"

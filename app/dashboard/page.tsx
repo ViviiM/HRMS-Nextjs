@@ -17,6 +17,14 @@ export default function DashboardPage() {
       pendingApprovals: 0,
       availableAssets: 0
   });
+  
+  const [chartData, setChartData] = useState({
+      departmentData: [],
+      leaveData: [],
+      trainingData: []
+  });
+
+  const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Default Stats Structure for UI (mapped from state)
@@ -28,25 +36,48 @@ export default function DashboardPage() {
   ];
 
   useEffect(() => {
-    // if (!getAuthToken()) {
-    //   router.push("/auth/login")
-    // }
-    
     fetch('/api/dashboard/stats')
-        .then(res => {
-          return res.json()
-        })
+        .then(res => res.json())
         .then(data => {
-          console.log(data);
-            if(data.success) setStats(data.data);
+            if(data.success) {
+                const { totalEmployees, activeLeaves, pendingApprovals, availableAssets, departmentData, leaveData, trainingData, recentActivities } = data.data;
+                
+                setStats({ totalEmployees, activeLeaves, pendingApprovals, availableAssets });
+                setChartData({ departmentData, leaveData, trainingData });
+                
+                // Map recent activities icons
+                const validActivities = recentActivities.map((act: any) => {
+                    let icon = Clock;
+                    let color = 'blue';
+                    if(act.type.includes('leave')) { icon = CalendarClock; color='amber'; }
+                    else if(act.type.includes('training')) { icon = Award; color='blue'; }
+                    else if(act.type.includes('employee')) { icon = Users; color='green'; }
+                    
+                    return { ...act, icon, color };
+                });
+                setActivities(validActivities);
+            }
             setLoading(false);
         })
         .catch(err => {
             setLoading(false);
-            console.log(err);
+            console.error(err);
         });
 
   }, [router])
+
+  // Process Stats Overview Data
+  const topDepts = [...chartData.departmentData]
+      .sort((a: any, b: any) => b.employees - a.employees)
+      .slice(0, 3)
+      .map((d: any) => ({ label: d.name, value: d.employees.toString(), sublabel: "Employees" }));
+
+  // Mock Attendance (since no source yet)
+  const attendanceStats = [
+      { label: "On Time", value: "92%" },
+      { label: "Late", value: "5%" },
+      { label: "Absent", value: "3%" }
+  ];
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -66,35 +97,27 @@ export default function DashboardPage() {
 
         {/* Charts */}
         <div className="mt-8">
-            <ChartSection />
+            <ChartSection 
+                departmentData={chartData.departmentData} 
+                leaveData={chartData.leaveData} 
+                trainingData={chartData.trainingData} 
+            />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
           <div className="lg:col-span-2 space-y-8">
             <QuickActions />
-            <RecentActivities activities={[
-                { id: '1', type: 'leave', message: 'John Doe applied for sick leave', timestamp: '2 hours ago', icon: Clock, color: 'amber' },
-                { id: '2', type: 'training', message: 'Sarah enrolled in React Advanced', timestamp: '4 hours ago', icon: Award, color: 'blue' },
-                { id: '3', type: 'employee', message: 'New employee Mike joined Design', timestamp: '1 day ago', icon: Users, color: 'green' },
-            ]} />
+            <RecentActivities activities={activities} />
           </div>
           <div>
             <StatsOverview stats={[
                 {
                     title: "Attendance",
-                    items: [
-                        { label: "On Time", value: "92%" },
-                        { label: "Late", value: "5%" },
-                        { label: "Absent", value: "3%" }
-                    ]
+                    items: attendanceStats
                 },
                 {
                     title: "Top Depts",
-                    items: [
-                        { label: "Engineering", value: "45", sublabel: "Employees" },
-                        { label: "Sales", value: "28", sublabel: "Employees" },
-                        { label: "HR", value: "8", sublabel: "Employees" }
-                    ]
+                    items: topDepts.length > 0 ? topDepts : [{ label: "No Data", value: "0" }]
                 }
             ]} />
           </div>

@@ -26,10 +26,10 @@ const menuItems = [
   { icon: Calendar, label: "Leaves", href: "/leaves" },
   { icon: CreditCard, label: "Payroll", href: "/payroll" },
   { icon: Briefcase, label: "Assets", href: "/assets" },
-  { icon: FileText, label: "Documents", href: "/documents" },
+  // { icon: FileText, label: "Documents", href: "/documents" }, // Removed as per request
   { icon: BookOpen, label: "Training", href: "/training" },
   { icon: Shield, label: "NDA & Policies", href: "/nda" },
-  { icon: Settings, label: "Settings", href: "/settings" },
+  { icon: Calendar, label: "Calendar", href: "/calendar" },
 ]
 
 interface SidebarProps {
@@ -80,13 +80,16 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                 <div className="text-xs font-bold text-slate-400 uppercase tracking-widest px-4 mb-3 mt-2">Main Menu</div>
                 {menuItems.map((item) => {
                     const isActive = pathname.startsWith(item.href)
+                    const itemId = `tour-${item.label.toLowerCase().replace(/ & /g, '-').replace(/ /g, '-')}`
                     return (
                         <Link 
                             key={item.href} 
                             href={item.href}
                             onClick={() => setIsOpen(false)} // Close on mobile navigation
                         >
-                            <div className={cn(
+                            <div 
+                                id={itemId}
+                                className={cn(
                                 "flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group relative",
                                 isActive 
                                     ? "bg-gradient-to-r from-cyan-50 to-blue-50 text-cyan-700 font-semibold" 

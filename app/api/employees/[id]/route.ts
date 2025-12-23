@@ -35,8 +35,8 @@ export async function GET(
     
     const query = `
       SELECT 
-        Id, Employee_ID__c, Contact__c, FirstName, LastName, Email, Phone,
-        Department__c, Role__c, Status__c, Join_Date__c, Base_Salary__c,
+        Id, Employee_ID__c, Contact__c ,Name, Contact__r.Email,Company_Email__c ,
+        Department__c, Role__c, Status__c, Joining_Date__c, Base_Salary__c,
         CTC__c, Profile_Photo_URL__c, Team_Lead__c
       FROM ${SF_OBJECTS.EMPLOYEE}
       WHERE Id = '${employeeId}'
@@ -58,14 +58,14 @@ export async function GET(
       Id: record.Id,
       EmployeeId: record.Employee_ID__c,
       ContactId: record.Contact__c,
-      FirstName: record.FirstName,
-      LastName: record.LastName,
-      Email: record.Email,
+      FirstName: record.Name,
+      LastName: record.Name,
+      Email: record.Contact__r.Email,
       Phone: record.Phone,
       Department: record.Department__c,
       Role: record.Role__c,
       Status: record.Status__c,
-      JoiningDate: record.Join_Date__c,
+      JoiningDate: record.Joining_Date__c,
       BaseSalary: record.Base_Salary__c,
       CTC: record.CTC__c,
       ProfilePhotoUrl: record.Profile_Photo_URL__c,
@@ -73,8 +73,8 @@ export async function GET(
 
       // UI-friendly aliases (camelCase)
       id: record.Id,
-      firstName: record.FirstName,
-      lastName: record.LastName,
+      firstName: record.Name,
+      lastName: record.Name,
       email: record.Email,
       phone: record.Phone,
       department: record.Department__c,

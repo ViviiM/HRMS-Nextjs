@@ -1,23 +1,29 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD, // Use App Password if 2FA is on, or normal password
+  },
+});
 
 export const sendEmail = async ({ to, subject, html }: { to: string, subject: string, html: string }) => {
-  if (!process.env.RESEND_API_KEY) {
-    console.warn("RESEND_API_KEY is not set. Email not sent.");
-    return { success: false, error: 'API Key missing' };
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+    console.warn("GMAIL_USER or GMAIL_APP_PASSWORD is not set. Email not sent.");
+    return { success: false, error: 'Gmail credentials missing' };
   }
 
   try {
-    const data = await resend.emails.send({
-      from: 'onboarding@resend.dev', // Update with verified domain
+    const info = await transporter.sendMail({
+      from: process.env.GMAIL_FROM || process.env.GMAIL_USER,
       to,
       subject,
       html,
     });
-    return { success: true, data };
+    return { success: true, data: info };
   } catch (error) {
-    console.error("Email sending failed:", error);
+    console.error("Gmail sending failed:", error);
     return { success: false, error };
   }
 };

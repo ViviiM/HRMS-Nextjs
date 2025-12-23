@@ -11,9 +11,9 @@ export async function GET(
     const conn = getSalesforceConnection();
 
     // Fetch leave balance for employee
-    const soql = `SELECT Id, Employee__c, Annual_Leave__c, Casual_Leave__c, 
-                         Sick_Leave__c, Earned_Leave__c, LastUpdatedDate__c
-                  FROM LeaveBalance__c WHERE Employee__c = '${employeeId}'`;
+    const soql = `SELECT Id, Employee__c, Annual_Leave__c, Casual_Balance__c, 
+                         Sick_Balance__c, Earned_Balance__c, Unpaid_Balance__c, Last_Reset_Date__c
+                  FROM Leave_Balance__c WHERE Employee__c = '${employeeId}'`; // Ensure Object Name is Leave_Balance__c
 
     const records = await queryRecords<any>(soql);
     if (!records || records.length === 0) {
@@ -29,21 +29,21 @@ export async function GET(
       Id: balance.Id,
       EmployeeId: balance.Employee__c,
       AnnualLeave: balance.Annual_Leave__c || 0,
-      CasualBalance: balance.Casual_Leave__c || 0,
-      SickBalance: balance.Sick_Leave__c || 0,
-      EarnedBalance: balance.Earned_Leave__c || 0,
-      UnpaidBalance: balance.Unpaid_Leave__c || 0,
-      LastResetDate: balance.Last_Reset_Date__c || balance.LastUpdatedDate__c,
+      CasualBalance: balance.Casual_Balance__c || 0,
+      SickBalance: balance.Sick_Balance__c || 0,
+      EarnedBalance: balance.Earned_Balance__c || 0,
+      UnpaidBalance: balance.Unpaid_Balance__c || 0,
+      LastResetDate: balance.Last_Reset_Date__c,
 
       // UI aliases
       id: balance.Id,
       employeeId: balance.Employee__c,
       Annual: balance.Annual_Leave__c || 0,
-      CasualLeave: balance.Casual_Leave__c || 0,
-      SickLeave: balance.Sick_Leave__c || 0,
-      EarnedLeave: balance.Earned_Leave__c || 0,
-      unpaidBalance: balance.Unpaid_Leave__c || 0,
-      LastUpdatedDate: balance.LastUpdatedDate__c,
+      CasualLeave: balance.Casual_Balance__c || 0,
+      SickLeave: balance.Sick_Balance__c || 0,
+      EarnedLeave: balance.Earned_Balance__c || 0,
+      unpaidBalance: balance.Unpaid_Balance__c || 0,
+      LastUpdatedDate: balance.Last_Reset_Date__c,
       Year: balance.Year__c || new Date().getFullYear().toString(),
     };
 

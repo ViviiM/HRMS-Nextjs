@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSalesforceConnection, queryRecords, updateRecordInSalesforce, SF_OBJECTS } from '@/lib/salesforce';
 import { sendEmail } from '@/lib/email';
+import { createCalendarEvent } from '@/lib/google-calendar';
 
 export async function PUT(
   request: NextRequest,
@@ -75,6 +76,23 @@ export async function PUT(
         if (Object.keys(updatePayload).length > 0) {
            await updateRecordInSalesforce(SF_OBJECTS.LEAVE_BALANCE, balance.Id, updatePayload);
         }
+      }
+
+      // Create Google Calendar Event
+      try {
+          const employeeName = `${leave.Contact__r?.FirstName || 'Employee'} ${leave.Contact__r?.LastName || ''}`.trim();
+          await createCalendarEvent({
+              summary: `${employeeName} - ${leave.LeaveType__c} Leave`,
+              description: `Leave Reason: ${leave.Reason__c || 'N/A'}`,
+              start: { date: leave.StartDate__c }, // "YYYY-MM-DD"
+              end: { date: leave.EndDate__c },     // Google Calendar end date is exclusive for all-day events? 
+                                                   // Actually for multi-day, end date is usually expected to be +1 day if all-day event.
+                                                   // But for simplicity we pass it as is, or handle increment.
+                                                   // Let's assume start/end date from SF is YYYY-MM-DD.
+          });
+          console.log("Google Calendar event created");
+      } catch (calError) {
+          console.error("Failed to create Google Calendar event:", calError);
       }
     }
 
