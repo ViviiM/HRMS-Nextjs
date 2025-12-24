@@ -41,8 +41,18 @@ export async function GET(req: NextRequest): Promise<NextResponse<any>> {
       conditions.push(`Leave_Type__c = '${escapeSOQL(leaveType)}'`);
     }
 
-    if (employeeId) {
-      conditions.push(`Employee__c = '${escapeSOQL(employeeId)}'`);
+    let targetEmployeeId = employeeId;
+    if (employeeId && employeeId.startsWith('EMP-')) {
+         const conn = await getSalesforceConnection();
+         const empQuery = `SELECT Id FROM ${SF_OBJECTS.EMPLOYEE} WHERE Employee_ID__c = '${escapeSOQL(employeeId)}' LIMIT 1`;
+         const empResult = await conn.query(empQuery);
+         if (empResult.totalSize > 0) {
+             targetEmployeeId = empResult.records[0].Id;
+         }
+    }
+
+    if (targetEmployeeId) {
+      conditions.push(`Employee__c = '${escapeSOQL(targetEmployeeId)}'`);
     }
 
     const offset = (page - 1) * pageSize;
@@ -144,14 +154,16 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<a
       totalDays,
       reason,
       sandwich,
-      onePlusTwo
+      onePlusTwo,
+      halfDay,
+      session: sessionType
     } = body;
 
     // Dynamically set employeeId from session if not provided
     if (!employeeId && session?.user?.sfId) {
       employeeId = session.user.sfId;
     }
-
+    console.log('Sesion user' , session?.user)
     // Validation
     if (!employeeId || !leaveType || !startDate || !endDate || !reason) {
       console.log("Missing required fields" , employeeId, leaveType, startDate, endDate, reason);
@@ -161,26 +173,38 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<a
       );
     }
 
+    // Session Logic
+    const leaveSession = halfDay ? (sessionType || 'Full Day') : 'Full Day';
+
+    let sfEmployeeId = employeeId;
+    if (employeeId.startsWith('EMP-')) {
+         const conn = await getSalesforceConnection();
+         const empQuery = `SELECT Id FROM ${SF_OBJECTS.EMPLOYEE} WHERE Employee_ID__c = '${escapeSOQL(employeeId)}' LIMIT 1`;
+         const empResult = await conn.query(empQuery);
+         if (empResult.totalSize > 0) {
+             sfEmployeeId = empResult.records[0].Id;
+         } else {
+             return NextResponse.json(
+                { success: false, error: "Invalid Employee ID", statusCode: 400 },
+                { status: 400 }
+             );
+         }
+    }
+
     // Check leave balance
     const leaveBalanceQuery = `
       SELECT Annual_Leave__c, Casual_Balance__c, Sick_Balance__c, Earned_Balance__c 
       FROM ${SF_OBJECTS.LEAVE_BALANCE}
-      WHERE Employee__c = '${employeeId}'
+      WHERE Employee__c = '${sfEmployeeId}'
       LIMIT 1
     `;
 
     const conn = await getSalesforceConnection();
     const balanceResult = await conn.query(leaveBalanceQuery);
-    if (balanceResult.totalSize === 0) {
-      console.log("Leave balance not found");
-      // return NextResponse.json(
-      //   { success: false, error: "Leave balance not found", statusCode: 404 },
-      //   { status: 404 }
-      // );
-    }
-
+    
+    // Create Leave Record (Salesforce)
     const leaveRecord: SFLeave = {
-      Employee__c: employeeId,
+      Employee__c: sfEmployeeId,
       Leave_Type__c: leaveType,
       Start_Date__c: startDate,
       End_Date__c: endDate,
@@ -190,10 +214,37 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<a
       Sandwich__c: sandwich || false,
       One_Plus_Two__c: onePlusTwo || false,
       TL_Approval__c: false,
-      HR_Approval__c: false
+      HR_Approval__c: false,
+      Session__c: leaveSession
     };
 
     const result = await conn.create(SF_OBJECTS.LEAVE, leaveRecord);
+    const sfId = result.id;
+    
+    // Get correct Employee String ID for DynamoDB
+    const dynamoEmployeeId = (session.user as any)?.employeeId || employeeId; 
+    // Uses session's string ID if valid (most likely for logged in user), else falls back to passed ID (which might be SF ID unfortunately if called by Admin).
+    // Ideally we want String ID. 
+    // If we only have SF ID (employeeId), we technically should query or rely on consistency.
+    // For now, if we are in this flow, 'employeeId' var holds the SF ID used for creation.
+    // 'session.user.employeeId' holds the String ID (EMP-XX).
+    
+    // Create Leave Record (DynamoDB - Dual Write)
+    if (result.success) {
+        const { createLeaveRequestInDynamo } = await import('@/lib/dynamo-integration');
+        await createLeaveRequestInDynamo({
+            Id: sfId,
+            EmployeeId: (session.user as any)?.employeeId || 'UNKNOWN', // Use String ID
+            LeaveType: leaveType,
+            StartDate: startDate,
+            EndDate: endDate,
+            TotalDays: totalDays,
+            Reason: reason,
+            Status: "Applied",
+            Session: leaveSession,
+            ...leaveRecord
+        });
+    }
 
     return NextResponse.json(
       {

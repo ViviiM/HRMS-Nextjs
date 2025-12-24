@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-config";
 import { getSalesforceConnection, SF_OBJECTS } from "@/lib/salesforce";
 import { uploadToS3 } from "@/lib/s3";
+import { updateEmployeeInDynamo } from "@/lib/dynamo-integration";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -11,6 +12,7 @@ export async function POST(req: NextRequest) {
   try {
      const formData = await req.formData();
      const file = formData.get("file") as File;
+     const employeeId = (session.user as any).employeeId;
      
      if (!file) return NextResponse.json({ error: "Missing file" }, { status: 400 });
 
@@ -36,6 +38,14 @@ export async function POST(req: NextRequest) {
      });
 
      if (!result.success) throw new Error("Failed to update Salesforce record");
+
+     // 3. Update DynamoDB (Dual Write)
+     if (employeeId) {
+         await updateEmployeeInDynamo(employeeId, {
+             ProfilePhotoUrl: s3Url,
+             Profile_Photo_URL__c: s3Url // Redundancy
+         });
+     }
 
      return NextResponse.json({ success: true, url: s3Url });
 

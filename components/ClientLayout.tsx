@@ -9,7 +9,8 @@ const PUBLIC_ROUTES = [
   "/auth/login", 
   "/auth/signup", 
   "/auth/forgot-password",
-  "/auth/change-password" // Maybe public or separate layout?
+  "/auth/change-password", // Maybe public or separate layout?
+  "/new-contact"
 ]
 
 export function ClientLayout({ children }: { children: React.ReactNode }) {

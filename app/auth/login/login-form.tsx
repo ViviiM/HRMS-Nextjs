@@ -7,7 +7,7 @@ import { motion } from "framer-motion"
 import { Loader2, Mail, Lock, LogIn } from "lucide-react"
 
 export default function LoginForm() {
-  const [email, setEmail] = useState("")
+  const [employeeId, setEmployeeId] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
@@ -19,7 +19,7 @@ export default function LoginForm() {
     setLoading(true)
 
     try {
-      const result = await login({ email, password })
+      const result = await login({ employeeId, password })
       console.log('result ,', result)
       if (result.success) {
         router.push("/dashboard")
@@ -52,16 +52,16 @@ export default function LoginForm() {
         )}
 
         <div className="relative group">
-          <label htmlFor="email" className={labelClasses}>
-            Email Address
+          <label htmlFor="employeeId" className={labelClasses}>
+            Employee ID
           </label>
           <Mail className={iconClasses} />
           <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
+            id="employeeId"
+            type="text"
+            value={employeeId}
+            onChange={(e) => setEmployeeId(e.target.value)}
+            placeholder="EMP-1001"
             className={inputClasses}
             required
           />

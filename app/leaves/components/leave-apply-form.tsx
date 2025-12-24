@@ -8,7 +8,9 @@ import { toast } from "sonner";
 
 export default function LeaveApplyForm({ onSuccess }: { onSuccess?: () => void }) {
   const [loading, setLoading] = useState(false);
-  const { register, handleSubmit, formState: { errors } } = useForm();
+  const { register, handleSubmit, watch, formState: { errors } } = useForm();
+  
+  const isHalfDay = watch("halfDay");
   
   const onSubmit = async (data: any) => {
     console.log("Submit", data);
@@ -100,14 +102,33 @@ export default function LeaveApplyForm({ onSuccess }: { onSuccess?: () => void }
         </div>
 
         {/* Half Day Checkbox */}
-        <div className="flex items-center">
-            <input 
-              type="checkbox" 
-              id="halfDay" 
-              {...register("halfDay")}
-              className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-            />
-            <label htmlFor="halfDay" className="ml-2 text-sm text-gray-700">Half Day?</label>
+        <div className="flex flex-col gap-4">
+            <div className="flex items-center">
+                <input 
+                  type="checkbox" 
+                  id="halfDay" 
+                  {...register("halfDay")}
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="halfDay" className="ml-2 text-sm text-gray-700">Half Day Request?</label>
+            </div>
+
+            {/* Session Select (Conditional) */}
+            {isHalfDay && (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                   <label className="block text-sm font-medium text-gray-700 mb-1">Session</label>
+                   <select 
+                      {...register("session", { required: true })} // Only checking if visible logic handled by hook
+                      className={inputClass}
+                      defaultValue="Full Day"
+                   >
+                     <option value="Full Day">Full Day (Standard)</option>
+                     <option value="Session 1">Session 1 (First Half)</option>
+                     <option value="Session 2">Session 2 (Second Half)</option>
+                   </select>
+                   <p className="text-xs text-gray-500 mt-1">Select Full Day if not a half-day, or specific session.</p>
+                </div>
+            )}
         </div>
 
         <button 

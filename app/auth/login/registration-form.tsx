@@ -1,12 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useForm } from "react-hook-form"
+import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { motion, AnimatePresence } from "framer-motion"
-import { Loader2, Upload, User, Mail, MapPin, CheckCircle, XCircle } from "lucide-react"
+import { Loader2, User, Mail, Calendar, Briefcase, Building, CheckCircle, XCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { Select, DatePicker } from "antd"
+import dayjs from "dayjs"
 
 // ==========================================
 // Custom Toast Component
@@ -43,22 +45,13 @@ function CustomToast({ message, type, onClose }: ToastProps) {
 // ==========================================
 // Form Schema & Component
 // ==========================================
-const MAX_FILE_SIZE = 5000000;
-const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
-
 const registrationSchema = z.object({
   firstName: z.string().min(2, "First name is required"),
   lastName: z.string().min(2, "Last name is required"),
   email: z.string().email("Invalid email address"),
-  address: z.string().min(5, "Address is required"),
-  // profilePhoto: z
-  //   .any()
-  //   .optional()
-  //   .refine((files) => !files || files.length === 0 || files[0]?.size <= MAX_FILE_SIZE, `Max file size is 5MB.`)
-  //   .refine(
-  //     (files) => !files || files.length === 0 || ACCEPTED_IMAGE_TYPES.includes(files?.[0]?.type),
-  //     ".jpg, .jpeg, .png and .webp files are accepted."
-  //   ),
+  role: z.string().min(1, "Role is required"),
+  department: z.string().min(1, "Department is required"),
+  joiningDate: z.any().refine((val) => val, "Joining Date is required"),
 })
 
 type RegistrationSchema = z.infer<typeof registrationSchema>
@@ -76,9 +69,13 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
   const {
     register: formRegister,
     handleSubmit,
+    control,
     formState: { errors },
   } = useForm<RegistrationSchema>({
     resolver: zodResolver(registrationSchema),
+    defaultValues: {
+         // Default values if needed
+    }
   })
 
   // Show validation errors as toasts
@@ -97,28 +94,31 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
     setToast(null)
 
     try {
-      const formData = new FormData()
-      formData.append("firstName", data.firstName)
-      formData.append("lastName", data.lastName)
-      formData.append("email", data.email)
-      formData.append("address", data.address)
-      // if (data.profilePhoto?.[0]) {
-      //   formData.append("profilePhoto", data.profilePhoto[0])
-      // }
+      const payload = {
+          firstName: data.firstName,
+          lastName: data.lastName,
+          email: data.email,
+          role: data.role,
+          department: data.department,
+          joiningDate: dayjs(data.joiningDate).format('YYYY-MM-DD')
+      }
 
       const res = await fetch("/api/register", {
         method: "POST",
-        body: formData,
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload),
       })
 
       const result = await res.json()
 
       if (result.success) {
-        setToast({ message: "Account created! Check your email for credentials.", type: 'success' })
+        setToast({ message: "Registration successful! Check your email for credentials.", type: 'success' })
         setTimeout(() => {
             if (onSuccess) onSuccess()
             else router.push("/auth/login")
-        }, 2000)
+        }, 3000)
       } else {
         setToast({ message: result.error || "Registration failed", type: 'error' })
       }
@@ -160,35 +160,75 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
                 <p className="text-[10px] text-gray-500 mt-1 ml-1 text-right">Credentials will be sent here</p>
             </div>
 
-            <div className="relative group">
-                <label htmlFor="address" className={labelClasses}>Employee Address</label>
-                <MapPin className={iconClasses} />
-                <textarea 
-                    {...formRegister("address")} 
-                    id="address" 
-                    className={`${inputClasses} min-h-[80px] pt-3 resize-none`} 
-                    placeholder="123 Corporate Blvd, Tech City, CA" 
-                />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="relative group">
+                    <label className={labelClasses}>Role</label>
+                    <Briefcase className="absolute left-3 top-9 text-blue-500 w-5 h-5 z-10 pointer-events-none" />
+                    <Controller
+                        name="role"
+                        control={control}
+                        render={({ field }) => (
+                            <Select
+                                {...field}
+                                showSearch
+                                placeholder="Select Role"
+                                className="w-full h-[50px] custom-select-auth"
+                                optionFilterProp="children"
+                                filterOption={(input, option) => (option!.children as unknown as string).toLowerCase().includes(input.toLowerCase())}
+                            >
+                                <Select.Option value="Intern">Intern</Select.Option>
+                                <Select.Option value="Employee">Employee</Select.Option>
+                                <Select.Option value="TL">Team Lead</Select.Option>
+                                <Select.Option value="Manager">Manager</Select.Option>
+                                <Select.Option value="HR">HR</Select.Option>
+                                <Select.Option value="Admin">Admin</Select.Option>
+                            </Select>
+                        )}
+                    />
+                </div>
+
+                <div className="relative group">
+                    <label className={labelClasses}>Department</label>
+                    <Building className="absolute left-3 top-9 text-blue-500 w-5 h-5 z-10 pointer-events-none" />
+                    <Controller
+                        name="department"
+                        control={control}
+                        render={({ field }) => (
+                            <Select
+                                {...field}
+                                showSearch
+                                placeholder="Select Dept"
+                                className="w-full h-[50px] custom-select-auth"
+                                optionFilterProp="children"
+                                filterOption={(input, option) => (option!.children as unknown as string).toLowerCase().includes(input.toLowerCase())}
+                            >
+                                <Select.Option value="Engineering">Engineering</Select.Option>
+                                <Select.Option value="Sales">Sales</Select.Option>
+                                <Select.Option value="HR">HR</Select.Option>
+                                <Select.Option value="Marketing">Marketing</Select.Option>
+                                <Select.Option value="Finance">Finance</Select.Option>
+                                <Select.Option value="Operations">Operations</Select.Option>
+                            </Select>
+                        )}
+                    />
+                </div>
             </div>
 
-            {/* <div className="relative group">
-                <label htmlFor="profilePhoto" className={labelClasses}>Profile Photo</label>
-                <div className="mt-1 flex justify-center px-6 py-6 border-2 border-dashed border-blue-200 rounded-xl hover:bg-blue-50/50 transition bg-white/40 backdrop-blur-sm group-hover:border-blue-400 cursor-pointer relative overflow-hidden">
-                    <div className="space-y-2 text-center relative z-10">
-                        <Upload className="mx-auto h-10 w-10 text-blue-500 group-hover:scale-110 transition-transform" />
-                        <div className="flex text-sm text-gray-600 justify-center">
-                            <label
-                                htmlFor="profilePhoto"
-                                className="relative cursor-pointer rounded-md font-bold text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500"
-                            >
-                                <span>Upload Photo</span>
-                                <input {...formRegister("profilePhoto")} id="profilePhoto" type="file" className="sr-only" accept="image/*" />
-                            </label>
-                        </div>
-                        <p className="text-xs text-gray-400">PNG, JPG up to 5MB</p>
-                    </div>
-                </div>
-            </div> */}
+            <div className="relative group">
+                <label className={labelClasses}>Joining Date</label>
+                <Calendar className="absolute left-3 top-9 text-blue-500 w-5 h-5 z-10 pointer-events-none" />
+                <Controller
+                    name="joiningDate"
+                    control={control}
+                    render={({ field }) => (
+                        <DatePicker 
+                            {...field} 
+                            className="w-full h-[50px] pl-10 rounded-xl border-gray-200/60 shadow-sm"
+                            format="YYYY-MM-DD"
+                        />
+                    )}
+                />
+            </div>
 
             <button
                 type="submit"
@@ -198,7 +238,7 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
                 {loading ? (
                     <>
                     <Loader2 className="animate-spin mr-2 h-5 w-5" />
-                    Creating Employee Record...
+                    Registering...
                     </>
                 ) : (
                     "Register Employee"
@@ -216,6 +256,37 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
           />
         )}
       </AnimatePresence>
+
+      <style jsx global>{`
+        .custom-select-auth .ant-select-selector {
+            border-radius: 0.75rem !important; /* rounded-xl */
+            height: 50px !important;
+            padding-left: 3rem !important; /* Increased space for icon */
+            display: flex !important;
+            align-items: center !important;
+            border-color: rgba(229, 231, 235, 0.6) !important;
+            background-color: rgba(255, 255, 255, 0.6) !important;
+            backdrop-filter: blur(4px);
+        }
+        .custom-select-auth .ant-select-selection-search {
+            padding-left: 3rem !important;
+        }
+        .custom-select-auth .ant-select-selection-item,
+        .custom-select-auth .ant-select-placeholder {
+            padding-left: 2rem !important; /* Offset from the selector padding */
+        }
+        /* DatePicker Fixes */
+        .ant-picker {
+             background-color: rgba(255, 255, 255, 0.6) !important;
+             backdrop-filter: blur(4px);
+             border-radius: 0.75rem !important;
+             height: 50px !important;
+             padding-left: 3rem !important; /* Space for icon */
+        }
+        .ant-picker-input > input {
+            font-size: 1rem !important; 
+        }
+      `}</style>
     </>
   )
 }

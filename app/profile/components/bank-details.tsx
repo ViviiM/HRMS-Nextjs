@@ -33,7 +33,7 @@ export default function BankDetailsTab() {
      setSaving(true);
      try {
          const res = await fetch("/api/profile/bank", {
-             method: "POST",
+             method: "PUT",
              headers: { "Content-Type": "application/json" },
              body: JSON.stringify(data)
          });

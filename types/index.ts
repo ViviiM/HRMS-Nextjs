@@ -72,6 +72,8 @@ export interface Employee {
   role: Employee['Role'];
   joinDate: string; // alias for JoiningDate
   salary: number; // alias for BaseSalary
+  baseSalary?: number; // UI uses baseSalary sometimes
+  teamLeadId?: string;
   status: string; // allow lowercase/variants used in UI
   position?: string; // UI uses `position`
   bankDetails?: BankDetails; // camelCase alias

@@ -17,7 +17,22 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
-    const soql = `SELECT Id, Document_Type__c, Document_category__c, File_ID__c, File_URL__c, Status__c, CreatedDate, Name FROM ${SF_OBJECTS.DOCUMENT} WHERE Employee__c = '${escapeSOQL(employeeId)}' ORDER BY CreatedDate DESC`;
+    let targetEmployeeId = employeeId;
+    if (employeeId.startsWith('EMP-')) {
+       // Resolve Salesforce ID from External ID
+       const { getSalesforceConnection } = await import('@/lib/salesforce');
+       const conn = await getSalesforceConnection();
+       const empQuery = `SELECT Id FROM ${SF_OBJECTS.EMPLOYEE} WHERE Employee_ID__c = '${escapeSOQL(employeeId)}' LIMIT 1`;
+       const empResult = await conn.query(empQuery);
+       if (empResult.totalSize > 0) {
+           targetEmployeeId = empResult.records[0].Id;
+       } else {
+           // If not found, technically we should 404, but let it fail or return empty downstream
+           console.warn(`Employee not found for External ID: ${employeeId}`);
+       }
+    }
+
+    const soql = `SELECT Id, Document_Type__c, Document_category__c, File_ID__c, File_URL__c, Status__c, CreatedDate, Name FROM ${SF_OBJECTS.DOCUMENT} WHERE Employee__c = '${escapeSOQL(targetEmployeeId)}' ORDER BY CreatedDate DESC`;
     const records = await queryRecords<any>(soql);
 
     return NextResponse.json({ success: true, data: records || [] }, { status: 200 });
@@ -51,9 +66,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Upload to S3
     const { url: fileUrl, key } = await uploadToS3(buffer, fileName, 'documents', contentType);
 
+    let targetEmployeeId = employeeId;
+    if (employeeId.startsWith('EMP-')) {
+       // Resolve Salesforce ID from External ID
+       const { getSalesforceConnection } = await import('@/lib/salesforce');
+       const conn = await getSalesforceConnection();
+       const empQuery = `SELECT Id FROM ${SF_OBJECTS.EMPLOYEE} WHERE Employee_ID__c = '${escapeSOQL(employeeId)}' LIMIT 1`;
+       const empResult = await conn.query(empQuery);
+       if (empResult.totalSize > 0) {
+           targetEmployeeId = empResult.records[0].Id;
+       }
+    }
+
     // Create Salesforce Document record
     const documentRecord = {
-      Employee__c: employeeId,
+      Employee__c: targetEmployeeId,
       Document_Type__c: documentType || 'Personal Documents',
       Document_category__c: category || 'Other',
       File_ID__c: key,

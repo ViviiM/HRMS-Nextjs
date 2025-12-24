@@ -241,6 +241,7 @@ export interface SFLeave {
   One_Plus_Two__c: boolean;
   TL_Approval__c: boolean;
   HR_Approval__c: boolean;
+  Session__c?: 'Full Day' | 'Session 1' | 'Session 2';
 }
 
 export interface SFLeaveBalance {
@@ -358,7 +359,7 @@ export async function updateRecordInSalesforce(
   recordData: Record<string, any>
 ): Promise<{ success: boolean }> {
   const conn = await getSalesforceConnection();
-  const result = await conn.update(objectName, recordId, recordData);
+  const result = await conn.update(objectName, { Id: recordId, ...recordData });
   return result;
 }
 

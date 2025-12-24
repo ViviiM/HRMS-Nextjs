@@ -9,29 +9,31 @@ import {
   escapeSOQL,
   queryRecords
 } from "@/lib/salesforce";
-import { s3Client, S3_BUCKET_NAME } from "@/lib/s3";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { createEmployeeInDynamo, createLeaveBalanceInDynamo } from "@/lib/dynamo-integration";
 import { sendEmail } from "@/lib/email";
-import { v4 as uuidv4 } from "uuid";
 import crypto from "crypto";
+import { encrypt } from "@/lib/crypto";
 
 export async function POST(req: NextRequest) {
   try {
-    const formData = await req.formData();
+    const body = await req.json();
 
     // Extract fields
-    const firstName = formData.get("firstName") as string;
-    const lastName = formData.get("lastName") as string;
-    const email = formData.get("email") as string;
-    const address = formData.get("address") as string;
-    const profilePhotoFile = formData.get("profilePhoto") as File | null;
+    const { 
+        firstName, 
+        lastName, 
+        email, 
+        role, 
+        department, 
+        joiningDate 
+    } = body;
 
     // ============================================
     // 1. VALIDATION
     // ============================================
-    if (!firstName || !lastName || !email) {
+    if (!firstName || !lastName || !email || !role || !department) {
       return NextResponse.json(
-        { success: false, error: "Missing required fields (Name, Email)" },
+        { success: false, error: "Missing required fields" },
         { status: 400 }
       );
     }
@@ -53,25 +55,9 @@ export async function POST(req: NextRequest) {
       `SELECT Id FROM ${SF_OBJECTS.CONTACT} WHERE Email = '${escapedEmail}' LIMIT 1`
     );
 
-    // if (existingContact.length > 0) {
-    //   return NextResponse.json(
-    //     { success: false, error: "Email already registered" },
-    //     { status: 409 }
-    //   );
-    // }
-
     // ============================================
-    // 3. UPLOAD PROFILE PHOTO TO S3 - (REMOVED: Handled in Profile after registration)
+    // 3. CREATE CONTACT RECORD
     // ============================================
-    const profilePhotoUrl = ""; 
-    // if (profilePhotoFile && profilePhotoFile.size > 0) {
-    //   // Previously implemented S3 Upload here
-    // }
-
-    // ============================================
-    // 4. CREATE CONTACT RECORD
-    // ============================================
-    // Check if contact exists, otherwise create new
     let contactId = "";
 
     if (existingContact && existingContact.length > 0) {
@@ -82,9 +68,9 @@ export async function POST(req: NextRequest) {
         LastName: lastName,
         Email: email,
         Phone: "", 
-        Date_of_Birth__c: "1900-01-01", 
+        Date_of_Birth__c: "", // Not asked in self-reg
         Gender__c: "Other", 
-        MailingStreet: address || "", 
+        MailingStreet: "", 
         Emergency_Contact_Name__c: "",
         Emergency_Contact_Number__c: "",
         Emergency_Contact_Relation__c: "",
@@ -99,45 +85,46 @@ export async function POST(req: NextRequest) {
       contactId = contactResult.id;
     }
 
-    // ============================================
-    // 5. GENERATE PASSWORD
-    // ============================================
-    // random 8 char password
-    const tempPassword = crypto.randomBytes(4).toString('hex');
+
 
     // ============================================
-    // 6. CREATE EMPLOYEE RECORD
+    // 4. GENERATE ID & PASSWORD
     // ============================================
-    const employeeId = uuidv4();
-    // Assuming Employee_Address__c is a Custom Address Field, we must write to components.
-    // If it's a Text Area, we write to Employee_Address__c.
-    // I will try to include BOTH or just one?
-    // Using loose type record to avoid interface strictness for now if needed, or update interface.
-    // Just in case, I will put the address in Employee_Address__c (if text) AND Employee_Address__Street__s (if address comp).
-    // But that might error if one doesn't exist.
-    // Best guess: User said "Address", so it's a Compound.
-    // I'll try `Employee_Address__Street__s` and `CountryCode` maybe?
-    // Let's safe-bet on `Employee_Address__Street__s` based on prompt metadata.
+    const timestamp = Date.now().toString().substr(-6);
+    const employeeId = `EMP-${timestamp}`;
+    const tempPassword = crypto.randomBytes(4).toString('hex');
     
-    // Note: I need to cast to any or update interface to allow dynamic fields if I'm unsure.
-    // or just rely on SFEmployee interface update I'll do next.
+    let encryptedPassword = tempPassword;
+    try {
+        encryptedPassword = encrypt(tempPassword);
+    } catch (err: any) {
+        console.error("Encryption failed, falling back to plaintext (Warning: Unsafe)", err.message);
+        // We catch here to allow flow to complete even if encryption config is missing, 
+        // but practically we should probably fail strict secure apps. 
+        // User requested "proper error handling".
+        if(err.message === 'ENCRYPTION_KEY not configured') {
+            throw new Error("Server Configuration Error: Encryption Key missing.");
+        }
+        throw err;
+    }
+
+    // ============================================
+    // 5. CREATE EMPLOYEE (Salesforce)
+    // ============================================
     
+    // Note: We use 'any' to bypass strict typed interface if fields like Password__c are missing from standard type defs
     const employeeRecord: any = {
       Employee_ID__c: employeeId,
       Contact__c: contactId,
-      Department__c: "Unassigned",
-      Role__c: "Intern", // Capitalize to match likely picklist
-      Joining_Date__c: new Date().toISOString().split("T")[0],
-      Status__c: "Active",
-      Profile_Photo_URL__c: profilePhotoUrl,
-      // Employee_Address__c: address, // Compound field likely read-only
-      Employee_Address__Street__s: address,
-      Employee_Address__CountryCode__s: 'IN', // Default
-      Password__c: tempPassword,
+      Department__c: department,
+      Role__c: role, 
+      Joining_Date__c: joiningDate || new Date().toISOString().split("T")[0],
+      Status__c: "Active", // Assuming direct active or could be "Pending"
+      Password__c: encryptedPassword,
       Is_Temp_Password__c: true,
       Company_Email__c: email,
-      // Username__c: email,
       Name: `${firstName} ${lastName}`,
+      Base_Salary__c: 0 // Default
     };
 
     const employeeResult = await createRecordInSalesforce(SF_OBJECTS.EMPLOYEE, employeeRecord);
@@ -148,37 +135,82 @@ export async function POST(req: NextRequest) {
     const sfEmployeeId = employeeResult.id;
 
     // ============================================
-    // 7. CREATE LEAVE BALANCE (Optional but good practice)
+    // 6. CREATE EMPLOYEE (DynamoDB)
     // ============================================
+    const dynamoRecord = {
+      EmployeeId: employeeId,
+      SfId: sfEmployeeId, // Storing Salesforce ID for session usage
+      ContactId: contactId,
+      FirstName: firstName,
+      LastName: lastName,
+      Name: `${firstName} ${lastName}`,
+      Email: email,
+      Phone: "",
+      Department: department,
+      Role: role,
+      Status__c: "Active",
+      JoiningDate: joiningDate,
+      Password: encryptedPassword,
+      IsTempPassword: true,
+      
+      // Flattened Contact Info
+      Gender: "Other",
+      Address: "",
+      EmergencyName: "",
+      EmergencyPhone: ""
+    };
+
+    try {
+        await createEmployeeInDynamo(dynamoRecord);
+    } catch (e) {
+        console.error("DynamoDB Write Error:", e);
+    }
+
+    // ============================================
+    // 7. CREATE LEAVE BALANCE (18 days rule)
+    // ============================================
+    const currentYear = new Date().getFullYear().toString();
+    const leaveData = {
+        Annual_Leave__c: 0,
+        Casual_Balance__c: 12,
+        Sick_Balance__c: 6,
+        Earned_Balance__c: 0,
+        Unpaid_Balance__c: 0,
+        Last_Reset_Date__c: new Date().toISOString().split('T')[0],
+        // Total_Days__c: 18, // Removed if not in SF Interface or keep if loose, but mostly irrelevant for strictly typed SF record unless ignored
+    };
+
+    // Dynamo
+    try {
+        await createLeaveBalanceInDynamo(employeeId, currentYear, { ...leaveData, Total_Days: 18 });
+    } catch (e) {
+        console.error("DynamoDB Leave Balance Error:", e);
+    }
+
+    // Salesforce
     const leaveBalanceRecord: SFLeaveBalance = {
       Employee__c: sfEmployeeId,
-      Annual_Leave__c: 0,
-      Casual_Balance__c: 0,
-      Sick_Balance__c: 0,
-      Earned_Balance__c: 0,
-      Unpaid_Balance__c: 0,
-      Last_Reset_Date__c: new Date().toISOString().split("T")[0],
-      Year__c: new Date().getFullYear().toString()
+      Year__c: currentYear,
+      ...leaveData
     };
-    await createRecordInSalesforce(SF_OBJECTS.LEAVE_BALANCE, leaveBalanceRecord).catch(e => console.error(e));
+    await createRecordInSalesforce(SF_OBJECTS.LEAVE_BALANCE, leaveBalanceRecord).catch(e => console.error("SF Leave Balance Error", e));
 
     // ============================================
     // 8. SEND EMAIL
     // ============================================
+    const setupLink = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/auth/change-password?id=${employeeId}&temp=${tempPassword}`;
+
     try {
       await sendEmail({
         to: email,
-        subject: "Welcome to HRMS - Your Credentials",
+        subject: "Welcome to MV Portal - Account Created",
         html: `
-          <div style="font-family: sans-serif; padding: 20px;">
-            <h2>Welcome, ${firstName}!</h2>
+            <h1>Welcome to MV Portal</h1>
+            <p>Hi ${firstName},</p>
             <p>Your employee account has been created successfully.</p>
-            <p><strong>Username/Email:</strong> ${email}</p>
-            <p><strong>Temporary Password:</strong> ${tempPassword}</p>
-            <br/>
-            <p>Please log in and change your password immediately.</p>
-            <p><a href="${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/auth/login">Login Here</a></p>
-          </div>
+            <p><strong>Employee ID:</strong> ${employeeId}</p>
+            <p>Please click the link below to set your password and access your account:</p>
+            <a href="${setupLink}">Set Password and Login</a>
         `
       });
     } catch (e) {

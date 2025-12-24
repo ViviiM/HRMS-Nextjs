@@ -7,6 +7,9 @@ import {
   FileText, CreditCard, ArrowLeft, Download, CheckCircle, Clock 
 } from "lucide-react";
 import { Tabs, Card, Tag, Button, Spin, Table, Statistic, Row, Col, Avatar } from "antd";
+import { EmployeeForm } from "../components/employee-form";
+import { useSession } from "next-auth/react";
+import dayjs from "dayjs";
 
 // Define strict types for our data
 interface LeaveBalance {
@@ -18,15 +21,35 @@ interface LeaveBalance {
 }
 
 interface Employee {
+  id?: string;
   firstName: string;
   lastName: string;
   email: string;
+  personalEmail?: string;
   phone: string;
   role: string;
   department: string;
   status: string;
   ProfilePhotoUrl?: string;
   joinDate: string;
+  salary?: number;
+  ctc?: number;
+  teamLeadId?: string;
+  
+  // Personal Details
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  nationality?: string;
+  dob?: string;
+  gender?: string;
+  experience?: number;
+  
+  // Emergency
+  emergencyContactName?: string;
+  emergencyContactNumber?: string;
+  emergencyContactRelation?: string;
 }
 
 export default function EmployeeDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -37,6 +60,9 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
+  const [showEditModal, setShowEditModal] = useState(false);
+  const { data: session } = useSession(); // Access session for role check logic inside component
+
   
   // Data States
   const [employee, setEmployee] = useState<Employee | null>(null);
@@ -99,8 +125,15 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
            <Card title="Personal Information" className="shadow-sm rounded-xl border-slate-100">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <InfoItem label="Full Name" value={`${employee.firstName} ${employee.lastName}`} icon={<User className="w-4 h-4" />} />
-                  <InfoItem label="Email" value={employee.email} icon={<Mail className="w-4 h-4" />} />
+                  <InfoItem label="Company Email" value={employee.email} icon={<Mail className="w-4 h-4" />} />
+                  <InfoItem label="Personal Email" value={employee.personalEmail} icon={<Mail className="w-4 h-4" />} />
                   <InfoItem label="Phone" value={employee.phone} icon={<Phone className="w-4 h-4" />} />
+                  
+                  <InfoItem label="Date of Birth" value={employee.dob} icon={<Calendar className="w-4 h-4" />} />
+                  <InfoItem label="Gender" value={employee.gender} icon={<User className="w-4 h-4" />} />
+                  <InfoItem label="Address" value={[employee.address, employee.city, employee.state, employee.zipCode, employee.nationality].filter(Boolean).join(', ')} icon={<MapPin className="w-4 h-4" />} />
+                  
+                  <InfoItem label="Emergency Contact" value={`${employee.emergencyContactName || ''} (${employee.emergencyContactRelation || ''}) - ${employee.emergencyContactNumber || ''}`} icon={<Phone className="w-4 h-4" />} />
                   <InfoItem label="Status" value={<Tag color={employee.status === 'Active' ? 'green' : 'red'}>{employee.status}</Tag>} />
               </div>
            </Card>
@@ -111,6 +144,13 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
                   <InfoItem label="Department" value={employee.department} icon={<Briefcase className="w-4 h-4" />} />
                   <InfoItem label="Role" value={employee.role} icon={<Briefcase className="w-4 h-4" />} />
                   <InfoItem label="Joining Date" value={employee.joinDate} icon={<Calendar className="w-4 h-4" />} />
+                  <InfoItem label="Experience" value={employee.experience ? `${employee.experience} Years` : 'N/A'} icon={<Clock className="w-4 h-4" />} />
+                  {['.','HR', 'Admin', 'Manager'].includes((session?.user as any)?.role || '') && (
+                      <>
+                        <InfoItem label="Base Salary" value={employee.salary ? `$${employee.salary.toLocaleString()}` : 'N/A'} icon={<CreditCard className="w-4 h-4" />} />
+                        <InfoItem label="CTC" value={employee.ctc ? `$${employee.ctc.toLocaleString()}` : 'N/A'} icon={<CreditCard className="w-4 h-4" />} />
+                      </>
+                  )}
                </div>
            </Card>
         </div>
@@ -246,10 +286,73 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
 
                   <div className="flex gap-3">
                       <Button type="primary" icon={<Mail className="w-4 h-4" />} href={`mailto:${employee.email}`}>Email</Button>
-                      {/* <Button icon={<MoreHorizontal className="w-4 h-4" />} /> */}
+                      
+                      {/* HR Actions */}
+                      {['.','HR', 'Admin', 'Manager'].includes((session?.user as any)?.role || '') && (
+                         <Button icon={<CheckCircle className="w-4 h-4" />} onClick={() => setShowEditModal(true)}>Edit Profile</Button> 
+                      )}
                   </div>
               </div>
           </div>
+
+          {showEditModal && (
+            <EmployeeForm 
+                employee={{
+                    ...employee,
+                    personalDetails: {
+                        address: employee.address,
+                        city: employee.city,
+                        state: employee.state,
+                        zipCode: employee.zipCode,
+                        nationality: employee.nationality,
+                        dob: employee.dob ? dayjs(employee.dob) : undefined,
+                        gender: employee.gender,
+                        experience: employee.experience,
+                        emergencyContact: employee.emergencyContactName,
+                        emergencyPhone: employee.emergencyContactNumber,
+                        emergencyRelation: employee.emergencyContactRelation,
+                    }
+                } as any}
+                onCancel={() => setShowEditModal(false)}
+                onSubmit={async (data) => {
+                    // Call PUT API
+                    try {
+                        const res = await fetch(`/api/employees/${id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(data)
+                        });
+                        const json = await res.json();
+                        if(json.success) {
+                            // Update local state
+                           const updatedData = data as any;
+                           setEmployee(prev => ({ ...prev!, ...updatedData, 
+                               // Merge nested personalDetails back to flat structure for display
+                               ...(updatedData.personalDetails ? {
+                                   address: updatedData.personalDetails.address,
+                                   city: updatedData.personalDetails.city,
+                                   state: updatedData.personalDetails.state,
+                                   zipCode: updatedData.personalDetails.zipCode,
+                                   nationality: updatedData.personalDetails.nationality,
+                                   dob: updatedData.personalDetails.dob,
+                                   gender: updatedData.personalDetails.gender,
+                                   experience: updatedData.personalDetails.experience,
+                                   emergencyContactName: updatedData.personalDetails.emergencyContact,
+                                   emergencyContactNumber: updatedData.personalDetails.emergencyPhone,
+                                   emergencyContactRelation: updatedData.personalDetails.emergencyRelation,
+                               } : {}) 
+                           }));
+                           setShowEditModal(false);
+                        } else {
+                            alert("Failed to update: " + json.error);
+                        }
+                    } catch(e) {
+                        console.error(e);
+                        alert("Update failed");
+                    }
+                }}
+            />
+          )}
 
           {/* Tabs Content */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 min-h-[500px] p-6">

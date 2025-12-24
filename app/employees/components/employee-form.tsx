@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { Modal, Form, Input, Select, DatePicker, Upload, Button, Tabs, message } from "antd"
+import { useState, useEffect } from "react"
+import { Modal, Form, Input, Select, DatePicker, Upload, Button, Tabs, message, InputNumber } from "antd"
 import { UploadOutlined, InboxOutlined } from "@ant-design/icons"
 import type { UploadFile } from "antd/es/upload/interface"
 import dayjs from "dayjs"
@@ -17,11 +17,28 @@ const { Dragger } = Upload
 export function EmployeeForm({ employee, onSubmit, onCancel }: EmployeeFormProps) {
   const [form] = Form.useForm()
   const [activeTab, setActiveTab] = useState("basic")
+  const [teamLeads, setTeamLeads] = useState<any[]>([])
   
+  // Fetch potential Team Leads (all employees for now)
+  useEffect(() => {
+    fetch('/api/employees')
+        .then(res => res.json())
+        .then(data => {
+            if(data.success) {
+                setTeamLeads(data.data.map((e: any) => ({
+                    label: `${e.FirstName} ${e.LastName || ''}`, 
+                    value: e.Id || e.EmployeeId 
+                })));
+            }
+        })
+        .catch(err => console.error("Failed to fetch employees", err));
+  }, []);
+
   // Initialize form values
   const initialValues = employee ? {
     ...employee,
-    joinDate: employee.joinDate ? dayjs(employee.joinDate) : undefined,
+    joinDate: employee.JoiningDate ? dayjs(employee.JoiningDate) : (employee.joinDate ? dayjs(employee.joinDate) : dayjs()),
+    teamLeadId: employee.TeamLeadId
   } : {
     status: "active",
     joinDate: dayjs(),
@@ -32,7 +49,7 @@ export function EmployeeForm({ employee, onSubmit, onCancel }: EmployeeFormProps
     // Transform values back to expected format
     const formattedData: Employee = {
       ...values,
-      id: employee?.id || Math.random().toString(36).substr(2, 9),
+      id: employee?.id,
       joinDate: values.joinDate ? values.joinDate.format("YYYY-MM-DD") : undefined,
     }
 
@@ -41,20 +58,39 @@ export function EmployeeForm({ employee, onSubmit, onCancel }: EmployeeFormProps
              id: f.uid,
              name: f.name,
              type: 'other',
-             url: f.url || '', // Mock
+             url: f.url || '', 
              uploadDate: new Date().toISOString().split('T')[0],
              verified: false
          })) : []
     }
+    
+    // Add new fields (flattened for API)
+    formattedData.teamLeadId = values.teamLeadId;
+    formattedData.baseSalary = values.baseSalary;
+    formattedData.role = values.role;
+    formattedData.department = values.department;
+    (formattedData as any).ctc = values.ctc;
+
+    // Use values.personalDetails directly as API expects it nested
+    if (values.personalDetails) {
+        (formattedData as any).personalDetails = {
+            ...values.personalDetails,
+            dob: values.personalDetails.dob ? values.personalDetails.dob.format("YYYY-MM-DD") : undefined,
+        };
+    }
+    
+    if (values.title) (formattedData as any).title = values.title;
+    if (values.leavingDate) (formattedData as any).leavingDate = values.leavingDate.format("YYYY-MM-DD");
 
     onSubmit(formattedData)
+    // Message handled by parent or here? The original code had message.success
     message.success(employee ? "Employee updated successfully!" : "Employee created successfully!")
   }
 
   const items = [
     {
       key: "basic",
-      label: "Basic Info",
+      label: "Basic Info", // Company Email Editable Here
       children: (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Form.Item name="firstName" label="First Name" rules={[{ required: true, message: 'Required' }]}>
@@ -63,38 +99,91 @@ export function EmployeeForm({ employee, onSubmit, onCancel }: EmployeeFormProps
           <Form.Item name="lastName" label="Last Name" rules={[{ required: true, message: 'Required' }]}>
              <Input placeholder="Doe" />
           </Form.Item>
-          <Form.Item name="email" label="Email" rules={[{ required: true, type: 'email' }]}>
+          <Form.Item name="email" label="Company Email" rules={[{ required: true, type: 'email' }]}>
              <Input placeholder="john@company.com" />
           </Form.Item>
           <Form.Item name="phone" label="Phone" rules={[{ required: true }]}>
              <Input placeholder="+1-555-0101" />
           </Form.Item>
+          
           <Form.Item name="department" label="Department" rules={[{ required: true }]}>
-            <Select placeholder="Select Department">
+            <Select 
+                showSearch 
+                placeholder="Search or Select Department"
+                optionFilterProp="children"
+                filterOption={(input, option) => (option!.children as unknown as string).toLowerCase().includes(input.toLowerCase())}
+            >
               <Option value="Engineering">Engineering</Option>
               <Option value="Sales">Sales</Option>
               <Option value="HR">HR</Option>
               <Option value="Marketing">Marketing</Option>
               <Option value="Finance">Finance</Option>
+              <Option value="Operations">Operations</Option>
             </Select>
           </Form.Item>
-          <Form.Item name="position" label="Position" rules={[{ required: true }]}>
-             <Input placeholder="Senior Developer" />
+          
+          <Form.Item name="role" label="Role" rules={[{ required: true }]}>
+             <Select 
+                showSearch
+                placeholder="Search or Select Role"
+                optionFilterProp="children"
+                filterOption={(input, option) => (option!.children as unknown as string).toLowerCase().includes(input.toLowerCase())}
+             >
+                <Option value="Intern">Intern</Option>
+                <Option value="Employee">Employee</Option>
+                <Option value="TL">Team Lead</Option>
+                <Option value="Manager">Manager</Option>
+                <Option value="HR">HR</Option>
+                <Option value="Admin">Admin</Option>
+             </Select>
           </Form.Item>
+
+          <Form.Item name="teamLeadId" label="Team Lead">
+            <Select
+                showSearch
+                placeholder="Search Team Lead"
+                optionFilterProp="label"
+                options={teamLeads}
+                allowClear
+            />
+          </Form.Item>
+
           <Form.Item name="joinDate" label="Join Date" rules={[{ required: true }]}>
              <DatePicker className="w-full" format="YYYY-MM-DD" />
           </Form.Item>
-          <Form.Item name="salary" label="Salary" rules={[{ required: true }]}>
-             <Input type="number" prefix="$" placeholder="120000" />
+          
+          <Form.Item name="salary" label="Base Salary" rules={[{ required: true }]}>
+             <InputNumber
+                className="w-full"
+                formatter={value => `$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                parser={value => value!.replace(/\$\s?|(,*)/g, '')}
+             />
           </Form.Item>
-          <Form.Item name="status" label="Status" className="md:col-span-2">
+
+          <Form.Item name="ctc" label="CTC (Annual)" rules={[{ required: true }]}>
+             <InputNumber
+                className="w-full"
+                formatter={value => `$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                parser={value => value!.replace(/\$\s?|(,*)/g, '')}
+             />
+          </Form.Item>
+          
+          <Form.Item name="title" label="Job Title/Designation">
+             <Input placeholder="Senior Software Engineer" />
+          </Form.Item>
+          
+          <Form.Item name="status" label="Status">
             <Select>
-              <Option value="active">Active</Option>
-              <Option value="intern">Intern</Option>
-              <Option value="on_notice">On Notice</Option>
-              <Option value="resigned">Resigned</Option>
-              <Option value="terminated">Terminated</Option>
+              <Option value="Active">Active</Option>
+              <Option value="Intern">Intern</Option>
+              <Option value="On Notice">On Notice</Option>
+              <Option value="Resign">Resigned</Option>
+              <Option value="Fire">Terminated</Option>
             </Select>
+          </Form.Item>
+
+          <Form.Item name="leavingDate" label="Separation Date">
+             <DatePicker className="w-full" format="YYYY-MM-DD" placeholder="If applicable" />
           </Form.Item>
         </div>
       ),
@@ -104,6 +193,11 @@ export function EmployeeForm({ employee, onSubmit, onCancel }: EmployeeFormProps
       label: "Personal Details",
       children: (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+           {/* Added Personal Email - Read Only */}
+           <Form.Item name="personalEmail" label="Personal Email">
+             <Input placeholder="john.doe@gmail.com" disabled />
+           </Form.Item>
+
            <Form.Item name={['personalDetails', 'address']} label="Address">
              <Input placeholder="123 Main St" />
            </Form.Item>
@@ -116,15 +210,34 @@ export function EmployeeForm({ employee, onSubmit, onCancel }: EmployeeFormProps
            <Form.Item name={['personalDetails', 'zipCode']} label="Zip Code">
              <Input placeholder="10001" />
            </Form.Item>
-           <Form.Item name={['personalDetails', 'nationality']} label="Nationality">
-             <Input placeholder="American" />
-           </Form.Item>
+            <Form.Item name={['personalDetails', 'nationality']} label="Nationality">
+              <Input placeholder="American" />
+            </Form.Item>
+            
+            <Form.Item name={['personalDetails', 'dob']} label="Date of Birth" rules={[{ required: true }]}>
+              <DatePicker className="w-full" format="YYYY-MM-DD" />
+            </Form.Item>
+
+            <Form.Item name={['personalDetails', 'gender']} label="Gender" rules={[{ required: true }]}>
+              <Select placeholder="Select Gender">
+                <Option value="Male">Male</Option>
+                <Option value="Female">Female</Option>
+                <Option value="Other">Other</Option>
+              </Select>
+            </Form.Item>
+
+            <Form.Item name={['personalDetails', 'experience']} label="Experience (Years)">
+               <InputNumber min={0} max={50} className="w-full" />
+            </Form.Item>
            <Form.Item name={['personalDetails', 'emergencyContact']} label="Emergency Contact">
              <Input placeholder="Name" />
            </Form.Item>
-           <Form.Item name={['personalDetails', 'emergencyPhone']} label="Emergency Phone">
-             <Input placeholder="+1..." />
-           </Form.Item>
+            <Form.Item name={['personalDetails', 'emergencyPhone']} label="Emergency Phone">
+              <Input placeholder="+1..." />
+            </Form.Item>
+            <Form.Item name={['personalDetails', 'emergencyRelation']} label="Emergency Relation">
+              <Input placeholder="Spouse, Parent, etc." />
+            </Form.Item>
         </div>
       ),
     },
@@ -174,7 +287,7 @@ export function EmployeeForm({ employee, onSubmit, onCancel }: EmployeeFormProps
 
   return (
     <Modal
-      title={employee ? "Edit Employee" : "Add New Employee"}
+      title={employee ? "Edit Employee" : "New Employee Registration"}
       open={true}
       onCancel={onCancel}
       footer={null}
@@ -201,7 +314,7 @@ export function EmployeeForm({ employee, onSubmit, onCancel }: EmployeeFormProps
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 bg-white z-10">
            <Button onClick={onCancel}>Cancel</Button>
            <Button type="primary" htmlType="submit">
-             {employee ? "Update Employee" : "Create Employee"}
+             {employee ? "Update Employee" : "Register Employee"}
            </Button>
         </div>
       </Form>

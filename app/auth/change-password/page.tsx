@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { Loader2, Lock } from "lucide-react";
@@ -12,6 +12,21 @@ export default function ChangePasswordPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
+
+  // Handling URL Params
+  const [employeeId, setEmployeeId] = useState("");
+  const [tempPassword, setTempPassword] = useState("");
+
+  useEffect(() => {
+    // Check for query params manually or use useSearchParams (requires Suspense bounadry in Next 13+ app dir usually)
+    // For simplicity using window.location if useSearchParams is tricky or just imports
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("id");
+    const temp = params.get("temp");
+    if(id) setEmployeeId(id);
+    if(temp) setTempPassword(temp);
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirm) {
@@ -21,10 +36,16 @@ export default function ChangePasswordPage() {
     
     setLoading(true);
     try {
+        const payload: any = { newPassword: password };
+        if (employeeId && tempPassword) {
+            payload.employeeId = employeeId;
+            payload.tempPassword = tempPassword;
+        }
+
         const res = await fetch("/api/auth/change-password", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ newPassword: password })
+            body: JSON.stringify(payload)
         });
         
         const json = await res.json();
@@ -32,7 +53,13 @@ export default function ChangePasswordPage() {
         if (res.ok) {
             toast.success("Password changed successfully. Please login again.");
             setTimeout(() => {
-                signOut({ callbackUrl: "/auth/login" });
+            setTimeout(() => {
+                if (employeeId) {
+                    router.push("/auth/login");
+                } else {
+                    signOut({ callbackUrl: "/auth/login" });
+                }
+            }, 1500);
             }, 1500);
         } else {
             toast.error(json.error || "Failed to update password");

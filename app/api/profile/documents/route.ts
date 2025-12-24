@@ -19,14 +19,19 @@ export async function GET(req: NextRequest) {
 
      if (!sfId) return NextResponse.json({ data: [] });
 
+     const documentCategory = await conn.query(`SELECT Document_Category__c FROM Employee__c WHERE Id = '${sfId}' LIMIT 1`);
      const q = `
        SELECT Id, Name, Document_Type__c, Status__c, File_URL__c, CreatedDate
        FROM Document__c
        WHERE Employee__c = '${sfId}'
        ORDER BY CreatedDate DESC
      `;
+
+     const documentMetadate = `SELECT Document_Category__c, Document_Type__c FROM Required_Doc_Based_On_Category__mdt WHERE Document_Category__c = '${documentCategory.records[0]?.Document_Category__c}' ORDER BY Document_Type__c ASC`;
+     const docMetaResult = await conn.query(documentMetadate);
      
-     const result = await conn.query(q);
+     let result = await conn.query(q);
+     result.meta = docMetaResult.records;
      return NextResponse.json({ success: true, data: result.records });
 
   } catch (error: any) {
