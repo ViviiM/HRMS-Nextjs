@@ -53,20 +53,37 @@ export async function POST(req: NextRequest) {
      const conn = await getSalesforceConnection();
      
      let sfId = (session.user as any).sfId;
+     let emp;
      if (!sfId) {
-        const emp = await conn.query(`SELECT Id FROM Employee__c WHERE Company_Email__c = '${session.user.email}' LIMIT 1`);
+        emp = await conn.query(`SELECT Id, Contact__r.Name FROM Employee__c WHERE Company_Email__c = '${session.user.email}' LIMIT 1`);
+        console.log("Employee Query Result:", emp);
         sfId = emp.records[0]?.Id;
      }
+
+     // Build a safe filename. If `emp` wasn't queried above (because `sfId` came from session),
+     // fetch the employee's contact name using the resolved `sfId`. Always guard against
+     // missing records to avoid "Cannot read properties of undefined" errors.
+     let contactName: string | undefined;
+     if (emp?.records?.[0]?.Contact__r?.Name) {
+       contactName = emp.records[0].Contact__r.Name;
+     } else {
+       const empLookup = await conn.query(`SELECT Contact__r.Name FROM Employee__c WHERE Id = '${sfId}' LIMIT 1`);
+       contactName = empLookup.records[0]?.Contact__r?.Name;
+     }
+
+     const safeContact = contactName ? contactName.replace(/\s+/g, '_') : 'unknown';
+     const fileName = `${safeContact}_${docType.replace(/\s+/g, '_')}`;
+     console.log("Uploading document for:", fileName);
 
      // 1. Upload to S3
      const arrayBuffer = await file.arrayBuffer();
      const buffer = Buffer.from(arrayBuffer);
      // const key = `documents/${sfId}/${uuidv4()}-${file.name}`; // Generated in lib/s3
-     const { url: s3Url } = await uploadToS3(buffer, file.name, "documents", file.type);
+     const { url: s3Url } = await uploadToS3(buffer, fileName, "documents", file.type);
      
      // 2. Create Salesforce Record
      const docRecord = {
-         Name: file.name,
+         Name: fileName,
          Employee__c: sfId,
          Document_Type__c: docType,
          Status__c: 'Pending Verification',
