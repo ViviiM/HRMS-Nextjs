@@ -60,7 +60,7 @@ export const SF_OBJECTS = {
   AUDIT_LOG: 'Audit_Log__c',
   
   // Notifications
-  NOTIFICATION: 'Notification__c',
+  NOTIFICATION: 'MV_Notification__c',
   HOLIDAY: 'Holiday__c'
 } as const;
 
@@ -330,14 +330,18 @@ export interface SFAuditLog {
 
 export interface SFNotification {
   Id?: string;
-  User__c: string;
-  Title__c: string;
+  Employee__c: string;
+  Subject__c: string;
   Message__c: string;
-  Type__c: string;
+  Notification_Type__c: string;
   Is_Read__c: boolean;
-  Created_At__c: string;
-  Action_URL__c?: string;
+  Action_Required__c: boolean;
   Related_Record_ID__c?: string;
+  Status__c: string;
+  Action_Taken__c?: string;
+  Comments__c?: string;
+  Expiry_Date__c?: string;
+  CreatedDate?: string;
 }
 
 // ============================================
@@ -422,7 +426,7 @@ export async function executeCompositeRequest(
   
   // Construct the composite request body
   const requestBody = {
-    allOrNone: false,
+    allOrNone: true,
     compositeRequest: subrequests.map(req => ({
       method: req.method,
       url: req.url,

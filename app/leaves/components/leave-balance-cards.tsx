@@ -42,21 +42,28 @@ export default function LeaveBalanceCards({ refreshTrigger }: { refreshTrigger: 
             const val = data[type];
             const cfg = config[type];
             return (
-                <div key={type} className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-col justify-between">
-                    <div className="text-xs text-gray-500 uppercase font-semibold">{type}</div>
-                    <div className="mt-2 text-2xl font-bold text-gray-800">
-                        {val}
-                        {cfg.total > 0 && <span className="text-sm text-gray-400 font-normal">/{cfg.total}</span>}
+                <div key={type} className="relative overflow-hidden bg-white/60 backdrop-blur-md p-5 rounded-2xl border border-white/20 shadow-sm hover:shadow-md transition-shadow group">
+                    <div className={`absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity`}>
+                        {/* Could add icons here based on type */}
+                        <div className={`w-16 h-16 rounded-full blur-xl ${cfg.color.replace('text-', 'bg-')}`}></div>
                     </div>
-                    {/* Add progress bar? */}
-                    {cfg.total > 0 && (
-                        <div className="w-full bg-gray-100 h-1.5 mt-2 rounded-full overflow-hidden">
-                            <div 
-                                className={`h-full bg-current ${cfg.color} opacity-80`} 
-                                style={{ width: `${Math.min((val / cfg.total) * 100, 100)}%` }}
-                            />
+                    
+                    <div className="relative z-10">
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">{type}</div>
+                        <div className="flex items-baseline gap-1">
+                            <span className={`text-3xl font-bold ${cfg.color}`}>{val}</span>
+                            {cfg.total > 0 && <span className="text-sm text-gray-400 font-medium">/ {cfg.total}</span>}
                         </div>
-                    )}
+                        
+                        {cfg.total > 0 && (
+                            <div className="w-full bg-gray-100 h-2 mt-3 rounded-full overflow-hidden">
+                                <div 
+                                    className={`h-full rounded-full transition-all duration-500 ease-out ${cfg.color.replace('text-', 'bg-')}`} 
+                                    style={{ width: `${Math.min((val / cfg.total) * 100, 100)}%` }}
+                                />
+                            </div>
+                        )}
+                    </div>
                 </div>
             )
        })}

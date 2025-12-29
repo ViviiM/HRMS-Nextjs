@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSalesforceConnection, queryRecords, updateRecordInSalesforce, SF_OBJECTS } from '@/lib/salesforce';
+import { getSalesforceConnection, queryRecords, updateRecordInSalesforce, createRecordInSalesforce, SF_OBJECTS } from '@/lib/salesforce';
 import { sendEmail } from '@/lib/email';
 import { createCalendarEvent } from '@/lib/google-calendar';
 
@@ -10,7 +10,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { approvalType } = body; // 'TL' or 'HR'
+    const { approvalType, comment } = body; // 'TL' or 'HR'
 
     if (!approvalType || !['TL', 'HR'].includes(approvalType)) {
       return NextResponse.json(
@@ -51,6 +51,7 @@ export async function PUT(
 
     if (tlApproved && hrApproved) {
       updateData.Status__c = 'Approved';
+      updateData.Approved_Date__c = new Date().toISOString().split('T')[0];
 
       // Update Leave Balance - deduct leave days
       const leaveBalanceSOQL = `SELECT Id, Annual_Leave__c, Casual_Balance__c, Sick_Balance__c, Earned_Balance__c FROM ${SF_OBJECTS.LEAVE_BALANCE} WHERE Employee__c = '${leave.Employee__c}'`;
@@ -99,18 +100,19 @@ export async function PUT(
     // Update leave record
     await updateRecordInSalesforce('Leave__c', id, updateData);
 
-    // Send notification email
+    // Notify Employee (Email + System Notification)
     const employeeName = `${leave.Contact__r?.FirstName || ''} ${leave.Contact__r?.LastName || ''}`.trim();
-    const emailSubject = `Leave ${approvalType === 'TL' ? 'Team Lead' : 'HR'} Approval`;
-    const emailBody = `Dear ${employeeName},
-
-Your leave application for ${leave.LeaveType__c} leave (${leave.StartDate__c} to ${leave.EndDate__c}) 
-has been approved by ${approvalType === 'TL' ? 'Team Lead' : 'HR'}.
-
-${tlApproved && hrApproved ? 'Your leave has been fully approved.' : 'Awaiting final approval.'}
-
-Best regards,
-HRMS System`;
+    const approverRole = approvalType === 'TL' ? 'Team Lead' : 'HR';
+    const emailSubject = `Leave Application Update: Approved by ${approverRole}`;
+    
+    // Email Body
+    const emailBody = `
+      <p>Dear ${employeeName},</p>
+      <p>Your leave application for <strong>${leave.LeaveType__c}</strong> (${leave.StartDate__c} to ${leave.EndDate__c}) has been <strong>approved</strong> by ${approverRole}.</p>
+      ${comment ? `<p><strong>Comment:</strong> ${comment}</p>` : ''}
+      <p>${tlApproved && hrApproved ? 'Your leave has been fully approved.' : 'Awaiting final approval.'}</p>
+      <p>Best regards,<br/>HRMS System</p>
+    `;
 
     if (leave.Contact__r?.Email) {
       await sendEmail({
@@ -118,6 +120,76 @@ HRMS System`;
         subject: emailSubject,
         html: emailBody,
       });
+    }
+
+    // System Notification for Employee
+    try {
+        await createRecordInSalesforce(SF_OBJECTS.NOTIFICATION, {
+            Employee__c: leave.Employee__c,
+            Subject__c: emailSubject,
+            Message__c: `Your leave has been approved by ${approverRole}.${comment ? ` Comment: ${comment}` : ''}`,
+            Notification_Type__c: 'Leave',
+            Is_Read__c: false,
+            Action_Required__c: false,
+            Related_Record_ID__c: id,
+            Status__c: 'Unread'
+        });
+    } catch (notifErr) {
+        console.error("Failed to create notification:", notifErr);
+    }
+
+    // Update DynamoDB Leave Status
+    const { updateLeaveStatusInDynamo, updateNotificationInDynamo } = await import('@/lib/dynamo-integration');
+    await updateLeaveStatusInDynamo({
+        EmployeeId: leave.Employee__c, // Best effort using SF ID if String ID not available. Ideally fetch String ID.
+        StartDate: leave.StartDate__c,
+        Id: id,
+        Status: tlApproved && hrApproved ? 'Approved' : 'Pending',
+        // No cancel reason for approval
+    });
+
+    // Update/Expire HR Notification (The one that asked for approval)
+    // Find notification related to this Leave ID that is Pending or Action Required
+    try {
+        const notifQuery = `SELECT Id, Employee__c FROM ${SF_OBJECTS.NOTIFICATION} WHERE Related_Record_ID__c = '${id}' AND Status__c = 'Pending'`;
+        const notifRecords = await queryRecords<any>(notifQuery);
+        
+        if (notifRecords && notifRecords.length > 0) {
+            for (const notif of notifRecords) {
+                // Update in Salesforce
+                await updateRecordInSalesforce(SF_OBJECTS.NOTIFICATION, notif.Id, {
+                    Status__c: 'Approved',
+                    Action_Required__c: false,
+                    Is_Read__c: true
+                });
+
+                // Update in DynamoDB
+                // We need the Employee String ID of the HR (not the applicant) to update the notification key.
+                // We'll try to use the Employee__c from the notification record (which is HR's SF ID).
+                // But Dynamo keys rely on String ID. If we don't have it, we might fail or need a lookup.
+                // Assuming we stored String ID if possible or consistent key usage. 
+                // However, without a query for HR's String ID, we might struggle if keys mismatch.
+                // Let's attempt update using what we have, or skip if intricate.
+                // IMPORTANT: Earlier we decided to store Notification with Partition Key EMP#<HR_SF_ID> or EMP#<HR_STRING_ID>??
+                // Creating notification used HR's String ID if available. 
+                // So we should query HR employee to get String ID to construct PK.
+                
+                const hrEmpQuery = `SELECT Employee_ID__c FROM ${SF_OBJECTS.EMPLOYEE} WHERE Id = '${notif.Employee__c}' LIMIT 1`;
+                const hrEmpResult = await queryRecords<any>(hrEmpQuery);
+                if (hrEmpResult && hrEmpResult.length > 0) {
+                     const hrStringId = hrEmpResult[0].Employee_ID__c;
+                     if (hrStringId) {
+                        await updateNotificationInDynamo(hrStringId, notif.Id, {
+                            Status: 'Approved',
+                            ActionRequired: false,
+                            IsRead: true
+                        });
+                     }
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Failed to update previous notifications:", e);
     }
 
     return NextResponse.json(

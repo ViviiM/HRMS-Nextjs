@@ -1,10 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { Bell, Search, Menu, ChevronDown, User } from "lucide-react"
+import { Search, Menu, ChevronDown, User } from "lucide-react"
 import Image from "next/image"
 import { signOut } from "next-auth/react"
 import { useSession } from "next-auth/react"
+import { NotificationDropdown } from "@/components/notifications/NotificationDropdown"
 
 interface HeaderProps {
     setSidebarOpen: (open: boolean) => void
@@ -17,6 +18,7 @@ export function Header({ setSidebarOpen }: HeaderProps) {
   return (
     <header className="sticky top-0 z-30 h-20 bg-slate-50/80 backdrop-blur-xl border-b border-slate-200/60 px-4 sm:px-6 lg:px-8 flex items-center justify-between">
        <div className="flex items-center gap-4">
+           {/* ... existing code ... */}
            <button 
                 onClick={() => setSidebarOpen(true)}
                 className="p-2 -ml-2 rounded-lg text-slate-500 hover:bg-slate-100 lg:hidden"
@@ -40,10 +42,9 @@ export function Header({ setSidebarOpen }: HeaderProps) {
 
        <div className="flex items-center gap-4 sm:gap-6">
            {/* Notifications */}
-           <button id="tour-notifications" className="relative p-2 rounded-full text-slate-500 hover:bg-white hover:text-cyan-600 hover:shadow-md transition-all">
-               <Bell className="w-5 h-5" />
-               <span className="absolute top-1.5 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-slate-50"></span>
-           </button>
+           <div id="tour-notifications">
+               <NotificationDropdown />
+           </div>
 
            {/* Divider */}
            <div className="h-8 w-px bg-slate-200 hidden sm:block"></div>

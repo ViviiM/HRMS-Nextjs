@@ -1,15 +1,18 @@
+
 "use client";
 
 import { useEffect, useState, use } from "react"; // Added 'use' for unwrapping params
 import { useRouter } from "next/navigation";
 import { 
   User, Mail, Phone, MapPin, Calendar, Briefcase, 
-  FileText, CreditCard, ArrowLeft, Download, CheckCircle, Clock 
+  FileText, CreditCard, ArrowLeft, Download, CheckCircle, Clock, MessageCircle, Bell 
 } from "lucide-react";
-import { Tabs, Card, Tag, Button, Spin, Table, Statistic, Row, Col, Avatar } from "antd";
+import { Tabs, Card, Tag, Button, Spin, Table, Statistic, Row, Col, Avatar, Modal, Form, Input, Select, DatePicker, InputNumber, message, Switch } from "antd";
 import { EmployeeForm } from "../components/employee-form";
 import { useSession } from "next-auth/react";
 import dayjs from "dayjs";
+
+const { TextArea } = Input;
 
 // Define strict types for our data
 interface LeaveBalance {
@@ -70,6 +73,14 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
   const [bankDetails, setBankDetails] = useState<any>(null);
   const [leaveBalance, setLeaveBalance] = useState<LeaveBalance | null>(null);
   const [leaveHistory, setLeaveHistory] = useState<any[]>([]);
+  // WhatsApp State
+  const [showMsgModal, setShowMsgModal] = useState(false);
+  const [msgText, setMsgText] = useState("");
+  const [sendingMsg, setSendingMsg] = useState(false);
+  // Internal Notification State
+  const [showNotifModal, setShowNotifModal] = useState(false);
+  const [sendingNotif, setSendingNotif] = useState(false);
+  const [notifForm] = Form.useForm();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -120,7 +131,7 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
       key: 'overview',
       label: 'Overview',
       children: (
-        <div className="space-y-6 animate-in fade-in duration-500">
+        <div className="flex flex-col gap-6 animate-in fade-in duration-500">
            {/* Personal Info */}
            <Card title="Personal Information" className="shadow-sm rounded-xl border-slate-100">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -253,8 +264,8 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
        <div className="max-w-6xl mx-auto">
           <Button 
              icon={<ArrowLeft className="w-4 h-4" />} 
-             type="text" 
-             className="mb-4 hover:bg-slate-100"
+             type='default' 
+             className="mb-4 hover:bg-slate-100 inline-flex items-center"
              onClick={() => router.back()}
           >
              Back to Directory
@@ -288,12 +299,102 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
                       <Button type="primary" icon={<Mail className="w-4 h-4" />} href={`mailto:${employee.email}`}>Email</Button>
                       
                       {/* HR Actions */}
-                      {['.','HR', 'Admin', 'Manager'].includes((session?.user as any)?.role || '') && (
-                         <Button icon={<CheckCircle className="w-4 h-4" />} onClick={() => setShowEditModal(true)}>Edit Profile</Button> 
+                      {['HR', 'Admin', 'Manager'].includes((session?.user as any)?.role || '') && (
+                         <>
+                            <Button 
+                                icon={<Bell className="w-4 h-4" />} 
+                                className="bg-orange-500 hover:bg-orange-600 text-white border-none"
+                                onClick={() => setShowNotifModal(true)}
+                            >
+                                Notify
+                            </Button>
+                            <Button 
+                                icon={<MessageCircle className="w-4 h-4" />} 
+                                className="bg-green-600 hover:bg-green-700 text-white border-none"
+                                onClick={() => setShowMsgModal(true)}
+                            >
+                                WhatsApp
+                            </Button>
+                            <Button icon={<CheckCircle className="w-4 h-4" />} onClick={() => setShowEditModal(true)}>Edit Profile</Button> 
+                         </>
                       )}
                   </div>
               </div>
           </div>
+
+           {/* Notification Modal */}
+           <Modal
+              title={<div className="flex items-center gap-2 text-orange-600"><Bell className="w-5 h-5"/> Send Portal Notification</div>}
+              open={showNotifModal}
+              onCancel={() => setShowNotifModal(false)}
+              footer={[
+                  <Button key="cancel" onClick={() => setShowNotifModal(false)}>Cancel</Button>,
+                  <Button 
+                    key="submit" 
+                    type="primary" 
+                    className="bg-orange-500 hover:bg-orange-600 border-none" 
+                    loading={sendingNotif}
+                    onClick={() => notifForm.submit()}
+                  >
+                    Send Notification
+                  </Button>
+              ]}
+           >
+              <Form
+                 form={notifForm}
+                 layout="vertical"
+                 className="pt-4"
+                 initialValues={{ type: 'Alert', actionRequired: false }}
+                 onFinish={async (values) => {
+                     setSendingNotif(true);
+                     try {
+                         const res = await fetch("/api/notifications", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                employeeId: id,
+                                ...values
+                            })
+                         });
+                         const json = await res.json();
+                         if (json.success) {
+                             message.success("Notification sent successfully");
+                             setShowNotifModal(false);
+                             notifForm.resetFields();
+                         } else {
+                             message.error(json.error || "Failed to send");
+                         }
+                     } catch(err) {
+                         message.error("Failed to send notification");
+                     } finally {
+                         setSendingNotif(false);
+                     }
+                 }}
+              >
+                  <Form.Item name="subject" label="Subject" rules={[{ required: true, message: 'Please enter a subject' }]}>
+                      <Input placeholder="e.g. Action Required: Document Missing" />
+                  </Form.Item>
+                  <Form.Item name="message" label="Message" rules={[{ required: true, message: 'Please enter a message' }]}>
+                      <TextArea rows={3} placeholder="Enter detailed message..." />
+                  </Form.Item>
+                  <Row gutter={16}>
+                      <Col span={12}>
+                          <Form.Item name="type" label="Type">
+                              <Select>
+                                  <Select.Option value="Alert">Alert</Select.Option>
+                                  <Select.Option value="Info">Info</Select.Option>
+                                  <Select.Option value="Action">Action</Select.Option>
+                              </Select>
+                          </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                          <Form.Item name="actionRequired" label="Action Required?" valuePropName="checked">
+                              <Switch />
+                          </Form.Item>
+                      </Col>
+                  </Row>
+              </Form>
+           </Modal>
 
           {showEditModal && (
             <EmployeeForm 
@@ -353,6 +454,63 @@ export default function EmployeeDetailPage({ params }: { params: Promise<{ id: s
                 }}
             />
           )}
+
+          {/* WhatsApp Modal */}
+          <Modal
+            title={<div className="flex items-center gap-2 text-green-700"><MessageCircle className="w-5 h-5"/> Send WhatsApp Notification</div>}
+            open={showMsgModal}
+            onCancel={() => setShowMsgModal(false)}
+            footer={[
+                <Button key="cancel" onClick={() => setShowMsgModal(false)}>Cancel</Button>,
+                <Button 
+                    key="send" 
+                    type="primary" 
+                    className="bg-green-600 hover:bg-green-700" 
+                    loading={sendingMsg}
+                    onClick={async () => {
+                        if(!msgText.trim()) return message.error("Please enter a message");
+                        setSendingMsg(true);
+                        try {
+                             const res = await fetch("/api/notifications/whatsapp", {
+                                 method: "POST",
+                                 headers: { "Content-Type": "application/json" },
+                                 body: JSON.stringify({
+                                     employeeId: id,
+                                     template: "hr_notification",
+                                     variables: [employee?.firstName || 'Employee', msgText]
+                                 })
+                             });
+                             const json = await res.json();
+                             if(json.success) {
+                                 message.success("WhatsApp message sent!");
+                                 setShowMsgModal(false);
+                                 setMsgText("");
+                             } else {
+                                 message.error(json.error || "Failed to send");
+                             }
+                        } catch(e) { message.error("Error sending message"); }
+                        finally { setSendingMsg(false); }
+                    }}
+                >
+                    Send Message
+                </Button>
+            ]}
+         >
+            <div className="py-4">
+                <div className="mb-4 bg-green-50 p-4 rounded-xl border border-green-100 text-green-800 text-sm">
+                    <strong>Template:</strong> HR Notification<br/>
+                    <div className="mt-1 opacity-75 italic">"Hi {employee?.firstName}, [Your Message]"</div>
+                </div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Message Content</label>
+                <TextArea 
+                    rows={4} 
+                    className="rounded-xl"
+                    placeholder="Enter the notification details here..." 
+                    value={msgText}
+                    onChange={e => setMsgText(e.target.value)}
+                />
+            </div>
+         </Modal>
 
           {/* Tabs Content */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 min-h-[500px] p-6">

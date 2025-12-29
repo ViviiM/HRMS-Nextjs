@@ -286,6 +286,9 @@ export default function RegistrationForm({ onSuccess }: RegistrationFormProps) {
         .ant-picker-input > input {
             font-size: 1rem !important; 
         }
+        .custom-select-auth .ant-select-content-value{
+            padding-left: 2rem !important; /* Offset from the selector padding */
+        }
       `}</style>
     </>
   )

@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, Mail, Phone, Briefcase, Plus, Filter, X } from "lucide-react";
+import { Search, Mail, Phone, Briefcase, Plus, Filter, X, Bell } from "lucide-react"; // Consolidated imports
 import { EmployeeForm } from "./components/employee-form";
 
-import { Input as AntInput, Select as AntSelect, Card, Avatar as AntAvatar, Tag, Row, Col, Button, Popover, Badge, Divider } from "antd";
+import { Input as AntInput, Select as AntSelect, Card, Avatar as AntAvatar, Tag, Row, Col, Button, Popover, Badge, Divider, Modal, Form, Switch, message, Input } from "antd";
+
+const { TextArea } = Input;
 
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -18,6 +20,11 @@ export default function EmployeesPage() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [showAddModal, setShowAddModal] = useState(false);
   
+  // Bulk Notification State
+  const [showBulkNotifModal, setShowBulkNotifModal] = useState(false);
+  const [sendingBulkNotif, setSendingBulkNotif] = useState(false);
+  const [bulkForm] = Form.useForm();
+
   const router = useRouter();
   const { data: session } = useSession();
   const role = (session?.user as any)?.role;
@@ -27,7 +34,6 @@ export default function EmployeesPage() {
       try {
         const res = await fetch("/api/employees");
         const json = await res.json();
-        console.log(json)
         if (json.success) setEmployees(json.data);
       } catch (e) { console.error(e); } 
       finally { setLoading(false); }
@@ -36,8 +42,8 @@ export default function EmployeesPage() {
   }, []);
 
   const filtered = employees.filter(emp => {
-      const matchesSearch = emp.FirstName.toLowerCase().includes(search.toLowerCase()) || 
-                            emp.Email.toLowerCase().includes(search.toLowerCase());
+      const matchesSearch = emp.FirstName?.toLowerCase().includes(search.toLowerCase()) || 
+                            emp.Email?.toLowerCase().includes(search.toLowerCase());
       const matchesDept = deptFilter === "All" || emp.Department === deptFilter;
       const matchesRole = roleFilter === "All" || emp.Role === roleFilter;
       const matchesStatus = statusFilter === "All" || emp.Status === statusFilter;
@@ -77,7 +83,7 @@ export default function EmployeesPage() {
                     onChange={setDeptFilter}
                     options={[
                         { value: 'All', label: 'All Departments' },
-                        ...departments.map(d => ({ value: d, label: d }))
+                        ...departments.map((d: any) => ({ value: d, label: d }))
                     ]}
                 />
             </div>
@@ -89,7 +95,7 @@ export default function EmployeesPage() {
                     onChange={setRoleFilter}
                     options={[
                         { value: 'All', label: 'All Roles' },
-                        ...roles.map(r => ({ value: r, label: r }))
+                        ...roles.map((r: any) => ({ value: r, label: r }))
                     ]}
                 />
             </div>
@@ -144,15 +150,25 @@ export default function EmployeesPage() {
             </Popover>
 
             {['HR', 'Admin'].includes(role) && (
-                <Button 
-                    type="primary" 
-                    icon={<Plus className="w-4 h-4" />}
-                    onClick={() => setShowAddModal(true)}
-                    className="bg-blue-600 hover:bg-blue-700"
-                >
-                    Add Employee
-                </Button>
+                <>
+                    <Button 
+                        icon={<Bell className="w-4 h-4" />}
+                        className="bg-orange-500 hover:bg-orange-600 text-white border-none"
+                        onClick={() => setShowBulkNotifModal(true)}
+                    >
+                        Notify All
+                    </Button>
+        <Button 
+            type="primary" 
+            icon={<Plus className="w-4 h-4" />}
+            onClick={() => setShowAddModal(true)}
+            className="bg-blue-600 hover:bg-blue-700"
+        >
+            Add Employee
+        </Button>
+                </>
             )}
+
         </div>
       </div>
 
@@ -160,7 +176,7 @@ export default function EmployeesPage() {
           <div className="text-center py-20 text-gray-400">Loading directory...</div>
       ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in fade-in duration-700">
-              {filtered.map(emp => (
+              {filtered.map((emp: any) => (
                   <Card 
                         key={emp.id} 
                         className={`hover:shadow-lg transition-all duration-300 border-slate-100 rounded-2xl overflow-hidden group ${
@@ -203,12 +219,83 @@ export default function EmployeesPage() {
           <div className="text-center py-20 text-gray-400">No employees found matching your filters.</div>
       )}
 
+      {/* Bulk Notification Modal */}
+       <Modal
+          title={<div className="flex items-center gap-2 text-orange-600"><Bell className="w-5 h-5"/> Notify All Employees</div>}
+          open={showBulkNotifModal}
+          onCancel={() => setShowBulkNotifModal(false)}
+          footer={[
+              <Button key="cancel" onClick={() => setShowBulkNotifModal(false)}>Cancel</Button>,
+              <Button 
+                key="submit" 
+                type="primary" 
+                className="bg-orange-500 hover:bg-orange-600 border-none" 
+                loading={sendingBulkNotif}
+                onClick={() => bulkForm.submit()}
+              >
+                Send to All
+              </Button>
+          ]}
+       >
+          <div className="mb-4 bg-orange-50 p-3 rounded-lg text-xs text-orange-800 border border-orange-100">
+              <strong>Warning:</strong> This will send a notification to <strong>ALL active employees</strong>. Please use with caution.
+          </div>
+          <Form
+             form={bulkForm}
+             layout="vertical"
+             initialValues={{ type: 'Alert', actionRequired: false }}
+             onFinish={async (values) => {
+                 setSendingBulkNotif(true);
+                 try {
+                     const res = await fetch("/api/notifications/bulk", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(values)
+                     });
+                     const json = await res.json();
+                     if (json.success) {
+                         message.success(`Sent to ${json.sentCount} employees`);
+                         setShowBulkNotifModal(false);
+                         bulkForm.resetFields();
+                     } else {
+                         message.error(json.error || "Failed to send");
+                     }
+                 } catch(err) {
+                     message.error("Failed to send notification");
+                 } finally {
+                     setSendingBulkNotif(false);
+                 }
+             }}
+          >
+              <Form.Item name="subject" label="Subject" rules={[{ required: true, message: 'Please enter a subject' }]}>
+                  <Input placeholder="e.g. System Maintenance Alert" />
+              </Form.Item>
+              <Form.Item name="message" label="Message" rules={[{ required: true, message: 'Please enter a message' }]}>
+                  <TextArea rows={3} placeholder="Enter detailed message..." />
+              </Form.Item>
+              <Row gutter={16}>
+                  <Col span={12}>
+                      <Form.Item name="type" label="Type">
+                          <AntSelect>
+                              <AntSelect.Option value="Alert">Alert</AntSelect.Option>
+                              <AntSelect.Option value="Info">Info</AntSelect.Option>
+                              <AntSelect.Option value="Action">Action</AntSelect.Option>
+                          </AntSelect>
+                      </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                      <Form.Item name="actionRequired" label="Action Required?" valuePropName="checked">
+                          <Switch />
+                      </Form.Item>
+                  </Col>
+              </Row>
+          </Form>
+       </Modal>
+      
       {showAddModal && (
         <EmployeeForm 
             onCancel={() => setShowAddModal(false)}
             onSubmit={(data) => {
-                // Determine if we are creating or updating (Form handles logic but here we might refresh list)
-                // For now, assume success closes modal and re-fetches
                 setShowAddModal(false); 
                 fetch('/api/employees')
                     .then(res => res.json())

@@ -1,4 +1,4 @@
-import { PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { PutCommand, QueryCommand, UpdateCommand, BatchWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { dynamoDb, DYNAMO_TABLE_NAME } from "./dynamodb";
 
 // ============================================
@@ -29,6 +29,10 @@ export const DYNAMO_KEYS = {
   PAYROLL: (empId: string, year: string, month: string) => ({
     pk: `EMP#${empId}`,
     sk: `PAYROLL#${year}#${month}`
+  }),
+  NOTIFICATION: (empId: string, id: string) => ({
+    pk: `EMP#${empId}`,
+    sk: `NOTIF#${id}`
   })
 };
 
@@ -81,10 +85,6 @@ export async function createEmployeeInDynamo(employeeData: any) {
     throw new Error(`DynamoDB Create Failed: ${(error as Error).message}`);
   }
 }
-
-// ... unchanged parts ...
-
-// ... unchanged parts ...
 
 // QUERY HELPER (Uses GSI to Query all Employees instead of Scan)
 export async function getAllEmployeesFromDynamo() {
@@ -285,4 +285,153 @@ export async function createLeaveRequestInDynamo(leaveData: any) {
     }
 }
 
+export async function updateLeaveStatusInDynamo(leaveData: { EmployeeId: string, StartDate: string, Id: string, Status: string, CancelReason?: string }) {
+    const { pk, sk } = DYNAMO_KEYS.LEAVE_REQUEST(leaveData.EmployeeId, leaveData.StartDate, leaveData.Id);
+    
+    const updateExpression = "SET #status = :status" + (leaveData.CancelReason ? ", #reason = :reason" : "");
+    const expressionAttributeNames: any = { "#status": "Status" };
+    const expressionAttributeValues: any = { ":status": leaveData.Status };
+    
+    if (leaveData.CancelReason) {
+        expressionAttributeNames["#reason"] = "CancelReason";
+        expressionAttributeValues[":reason"] = leaveData.CancelReason;
+    }
 
+    try {
+        await dynamoDb.send(new UpdateCommand({
+            TableName: DYNAMO_TABLE_NAME,
+            Key: {
+                Employee_Id: pk,
+                SortKey: sk
+            },
+            UpdateExpression: updateExpression,
+            ExpressionAttributeNames: expressionAttributeNames,
+            ExpressionAttributeValues: expressionAttributeValues
+        }));
+        return { success: true };
+    } catch (error) {
+        console.error("DynamoDB Update Leave Status Error:", error);
+        return { success: false, error }; // Don't crash
+    }
+}
+
+
+
+export async function createNotificationInDynamo(notificationData: any) {
+    const { pk, sk } = DYNAMO_KEYS.NOTIFICATION(notificationData.EmployeeId, notificationData.Id);
+    
+    // Default GSI for IsRead? Maybe overkill unless we query *only* unread.
+    // Client filtering is fine for < 100 notifications.
+    
+    const item = {
+        Employee_Id: pk,
+        SortKey: sk,
+        EntityType: 'Notification',
+        ...notificationData,
+        CreatedAt: new Date().toISOString()
+    };
+
+    try {
+        await dynamoDb.send(new PutCommand({
+            TableName: DYNAMO_TABLE_NAME,
+            Item: item
+        }));
+        return { success: true };
+    } catch (error) {
+        console.error("DynamoDB Create Notification Error:", error);
+        return { success: false, error };
+    }
+}
+
+export async function getNotificationsFromDynamo(empId: string) {
+    const pk = `EMP#${empId}`;
+    try {
+        const result = await dynamoDb.send(new QueryCommand({
+            TableName: DYNAMO_TABLE_NAME,
+            KeyConditionExpression: "Employee_Id = :pk AND begins_with(SortKey, :sk)",
+            ExpressionAttributeValues: {
+                ":pk": pk,
+                ":sk": "NOTIF#"
+            },
+            ScanIndexForward: false // Newest first
+        }));
+        return result.Items || [];
+    } catch (error) {
+        console.error("DynamoDB Get Notifications Error:", error);
+        return null; // Return null to signal error/fallback needed
+    }
+}
+
+export async function updateNotificationInDynamo(empId: string, notifId: string, updates: any) {
+    const { pk, sk } = DYNAMO_KEYS.NOTIFICATION(empId, notifId);
+    
+    const validKeys = Object.keys(updates).filter(k => updates[k] !== undefined);
+    if (validKeys.length === 0) return { success: true }; 
+
+    const updateExpression = "SET " + validKeys.map((k, i) => `#${k} = :${k}`).join(", ");
+    const expressionAttributeNames = validKeys.reduce((acc, k) => ({ ...acc, [`#${k}`]: k }), {});
+    const expressionAttributeValues = validKeys.reduce((acc, k) => ({ ...acc, [`:${k}`]: updates[k] }), {});
+
+    try {
+        await dynamoDb.send(new UpdateCommand({
+            TableName: DYNAMO_TABLE_NAME,
+            Key: {
+                Employee_Id: pk,
+                SortKey: sk
+            },
+            UpdateExpression: updateExpression,
+            ExpressionAttributeNames: expressionAttributeNames,
+            ExpressionAttributeValues: expressionAttributeValues
+        }));
+        return { success: true };
+    } catch (error) {
+         console.error("DynamoDB Update Notification Error:", error);
+         throw error;
+    }
+}
+
+export async function batchCreateNotificationsInDynamo(notifications: any[]) {
+    if (notifications.length === 0) return { success: true };
+
+    // Helper to chunk array
+    const chunkArray = (arr: any[], size: number) => {
+        const result = [];
+        for (let i = 0; i < arr.length; i += size) {
+            result.push(arr.slice(i, i + size));
+        }
+        return result;
+    };
+
+    const batches = chunkArray(notifications, 25);
+    
+    try {
+        const promises = batches.map(batch => {
+            const requestItems = batch.map(n => {
+                const { pk, sk } = DYNAMO_KEYS.NOTIFICATION(n.EmployeeId, n.Id);
+                return {
+                    PutRequest: {
+                        Item: {
+                            Employee_Id: pk,
+                            SortKey: sk,
+                            EntityType: 'Notification',
+                            ...n,
+                            CreatedAt: new Date().toISOString()
+                        }
+                    }
+                };
+            });
+
+            return dynamoDb.send(new BatchWriteCommand({
+                RequestItems: {
+                    [DYNAMO_TABLE_NAME]: requestItems
+                }
+            }));
+        });
+
+        await Promise.all(promises);
+        return { success: true };
+    } catch (error) {
+        console.error("DynamoDB Batch Write Error:", error);
+        return { success: false, error };
+    }
+}

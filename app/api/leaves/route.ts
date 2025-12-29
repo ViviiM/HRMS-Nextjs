@@ -173,6 +173,17 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<a
       );
     }
 
+    // Half Day Validation
+    if (halfDay) {
+        if (startDate !== endDate) {
+            return NextResponse.json(
+                { success: false, error: "For Half Day, Start Date and End Date must be same.", statusCode: 400 },
+                { status: 400 }
+            );
+        }
+        totalDays = 0.5; // Enforce 0.5 for half day
+    }
+
     // Session Logic
     const leaveSession = halfDay ? (sessionType || 'Full Day') : 'Full Day';
 
@@ -191,6 +202,51 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<a
          }
     }
 
+    // ---------------------------------------------------------
+    // CALCULATION LOGIC: Sandwich & OnePlusTwo
+    // ---------------------------------------------------------
+    
+    // Helper to check if a date is a weekend (Sat/Sun)
+    const isWeekend = (date: Date) => {
+        const day = date.getDay();
+        return day === 0 || day === 6; // 0=Sun, 6=Sat
+    };
+
+    const sDate = new Date(startDate);
+    const eDate = new Date(endDate);
+    
+    // Get Previous and Next Dates
+    const prevDate = new Date(sDate);
+    prevDate.setDate(sDate.getDate() - 1);
+    
+    const nextDate = new Date(eDate);
+    nextDate.setDate(eDate.getDate() + 1);
+    
+    const formatDate = (d: Date) => d.toISOString().split('T')[0];
+    const prevDateStr = formatDate(prevDate);
+    const nextDateStr = formatDate(nextDate);
+    
+    // Query Holidays for Prev and Next dates
+    // Using SF_OBJECTS.HOLIDAY which is 'Holiday__c'
+    // Field assumption: Holiday_Date__c
+    // We treat weekends as holidays for this logic + explicit holidays
+    
+    const conn = await getSalesforceConnection(); // Move connection up
+    
+    const holidayQuery = `SELECT Id, Holiday_Date__c FROM ${SF_OBJECTS.HOLIDAY} WHERE Holiday_Date__c IN ('${escapeSOQL(prevDateStr)}', '${escapeSOQL(nextDateStr)}')`;
+    const holidayResult = await conn.query(holidayQuery);
+    const holidayDates = new Set(holidayResult.records.map((h: any) => h.Holiday_Date__c));
+    
+    const isPrevOff = isWeekend(prevDate) || holidayDates.has(prevDateStr);
+    const isNextOff = isWeekend(nextDate) || holidayDates.has(nextDateStr);
+    
+    const isSandwich = isPrevOff && isNextOff;
+    const isOnePlusTwo = isPrevOff || isNextOff; // One leave + holidays
+    
+    // Override user input with calculated values
+    sandwich = isSandwich;
+    onePlusTwo = isOnePlusTwo;
+
     // Check leave balance
     const leaveBalanceQuery = `
       SELECT Annual_Leave__c, Casual_Balance__c, Sick_Balance__c, Earned_Balance__c 
@@ -199,7 +255,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<a
       LIMIT 1
     `;
 
-    const conn = await getSalesforceConnection();
+    // const conn = await getSalesforceConnection(); // Already initialized above
     const balanceResult = await conn.query(leaveBalanceQuery);
     
     // Create Leave Record (Salesforce)
@@ -211,8 +267,8 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<a
       Total_Days__c: totalDays,
       Reason__c: reason,
       Status__c: "Applied",
-      Sandwich__c: sandwich || false,
-      One_Plus_Two__c: onePlusTwo || false,
+      Sandwich__c: sandwich,
+      One_Plus_Two__c: onePlusTwo,
       TL_Approval__c: false,
       HR_Approval__c: false,
       Session__c: leaveSession
@@ -242,8 +298,104 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<a
             Reason: reason,
             Status: "Applied",
             Session: leaveSession,
-            ...leaveRecord
+            Sandwich: sandwich || false,
+            OnePlusTwo: onePlusTwo || false,
+            TLApproval: false,
+            HRApproval: false
         });
+
+        // ---------------------------------------------------------
+        // NOTIFY HR Logic
+        // ---------------------------------------------------------
+        try {
+            // 1. Find HR Employee(s) to notify
+            // Query for an active employee with Role = 'HR'.
+            const hrQuery = `SELECT Id, Employee_ID__c, Contact__r.Email , Company_Email__c FROM ${SF_OBJECTS.EMPLOYEE} WHERE Role__c = 'HR' AND Status__c = 'Active' LIMIT 1`;
+            const hrResult = await conn.query(hrQuery);
+            
+            if (hrResult.totalSize > 0) {
+                const hrEmployee = hrResult.records[0];
+                const hrEmail = hrEmployee.Company_Email__c || hrEmployee.Contact__r?.Email;
+                const hrId = hrEmployee.Id;
+                
+                // Fetch Applicant Name for email context
+                let applicantName = "Employee";
+                if (session?.user?.name) {
+                    applicantName = session.user.name;
+                } else {
+                     // Try to get from SF if we have it
+                     const applicantQuery = `SELECT Contact__r.FirstName, Contact__r.LastName FROM ${SF_OBJECTS.EMPLOYEE} WHERE Id = '${sfEmployeeId}' LIMIT 1`;
+                     const applicantResult = await conn.query(applicantQuery);
+                     if (applicantResult.totalSize > 0) {
+                         applicantName = `${applicantResult.records[0].Contact__r?.FirstName || ''} ${applicantResult.records[0].Contact__r?.LastName || ''}`.trim();
+                     }
+                }
+
+                // 2. Send Email to HR
+                if (hrEmail) {
+                    const { sendEmail } = await import('@/lib/email');
+                    await sendEmail({
+                        to: hrEmail,
+                        subject: `New Leave Application: ${applicantName} - ${leaveType}`,
+                        html: `
+                          <h2>New Leave Application</h2>
+                          <p><strong>Employee:</strong> ${applicantName}</p>
+                          <p><strong>Leave Type:</strong> ${leaveType}</p>
+                          <p><strong>Duration:</strong> ${startDate} to ${endDate} (${totalDays} days)</p>
+                          <p><strong>Reason:</strong> ${reason}</p>
+                          <br/>
+                          <p>Reference ID: ${sfId}</p>
+                          <p>Please log in to the HRMS portal to approve or reject this request.</p>
+                        `
+                    });
+                }
+                
+                // 3. Create Notification for HR
+                const notificationRecord = {
+                    Employee__c: hrId,
+                    Subject__c: `New Leave Request - ${applicantName}`,
+                    Message__c: `${applicantName} has applied for ${leaveType} leave for ${totalDays} days.`,
+                    Notification_Type__c: 'Leave',
+                    Is_Read__c: false,
+                    Action_Required__c: true,
+                    Related_Record_ID__c: sfId,
+                    Status__c: 'Pending'
+                };
+                
+                const notifRes = await conn.create(SF_OBJECTS.NOTIFICATION, notificationRecord);
+                
+                // Sync Notification to DynamoDB
+                if (notifRes.success) {
+                    const { createNotificationInDynamo } = await import('@/lib/dynamo-integration');
+                    // We need HR's String ID for DynamoDB partition Key (EMP-XX).
+                    // The query above select Id, Email. We should select Employee_ID__c too.
+                    // Assuming we updated query below:
+                    
+                     const hrStringId = hrEmployee.Employee_ID__c; 
+                     if(hrStringId) {
+                        await createNotificationInDynamo({
+                            Id: notifRes.id,
+                            EmployeeId: hrStringId,
+                            LeaveType: leaveType,
+                            StartDate: startDate,
+                            EndDate: endDate,
+                            TotalDays: totalDays,
+                            Reason: reason,
+                            Session: leaveSession,
+                            Subject: notificationRecord.Subject__c,
+                            Message: notificationRecord.Message__c,
+                            Type: 'Leave',
+                            IsRead: false,
+                            ActionRequired: true,
+                            RelatedRecordId: sfId,
+                            Status: 'Pending'
+                        });
+                     }
+                }
+            }
+        } catch (notifyError) {
+            console.error("Failed to notify HR:", notifyError);
+        }
     }
 
     return NextResponse.json(

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSalesforceConnection, queryRecords, updateRecordInSalesforce } from '@/lib/salesforce';
+import { getSalesforceConnection, queryRecords, updateRecordInSalesforce, createRecordInSalesforce, SF_OBJECTS } from '@/lib/salesforce';
 import { sendEmail } from '@/lib/email';
 
 export async function PUT(
@@ -47,28 +47,26 @@ export async function PUT(
 
     // Store rejection reason
     if (rejectionType === 'TL') {
-      updateData.CancelReasonTL__c = reason;
+      updateData.Cancel_Reason_TL__c = reason;
     } else {
-      updateData.CancelReasonHR__c = reason;
+      updateData.Cancel_Reason_HR__c = reason;
     }
 
     // Update leave record
     await updateRecordInSalesforce('Leave__c', id, updateData);
 
-    // Send notification email
+    // Notify Employee
     const employeeName = `${leave.Contact__r?.FirstName || ''} ${leave.Contact__r?.LastName || ''}`.trim();
-    const emailSubject = `Leave Application Rejected`;
-    const emailBody = `Dear ${employeeName},
-
-Unfortunately, your leave application for ${leave.LeaveType__c} leave (${leave.StartDate__c} to ${leave.EndDate__c}) 
-has been rejected by ${rejectionType === 'TL' ? 'Team Lead' : 'HR'}.
-
-Reason: ${reason}
-
-Please contact your ${rejectionType === 'TL' ? 'Team Lead' : 'HR'} for further discussion.
-
-Best regards,
-HRMS System`;
+    const rejectorRole = rejectionType === 'TL' ? 'Team Lead' : 'HR';
+    const emailSubject = `Leave Application Rejected by ${rejectorRole}`;
+    
+    const emailBody = `
+      <p>Dear ${employeeName},</p>
+      <p>Unfortunately, your leave application for <strong>${leave.LeaveType__c}</strong> (${leave.StartDate__c} to ${leave.EndDate__c}) has been <strong>rejected</strong> by ${rejectorRole}.</p>
+      <p><strong>Reason:</strong> ${reason}</p>
+      <p>Please contact your ${rejectorRole} for further discussion.</p>
+      <p>Best regards,<br/>HRMS System</p>
+    `;
 
     if (leave.Contact__r?.Email) {
       await sendEmail({
@@ -76,6 +74,65 @@ HRMS System`;
         subject: emailSubject,
         html: emailBody,
       });
+    }
+
+    // System Notification
+    try {
+        await createRecordInSalesforce(SF_OBJECTS.NOTIFICATION, {
+            Employee__c: leave.Employee__c,
+            Subject__c: emailSubject,
+            Message__c: `Your leave has been rejected by ${rejectorRole}. Reason: ${reason}`,
+            Notification_Type__c: 'Leave',
+            Is_Read__c: false,
+            Action_Required__c: false, // Info only
+            Related_Record_ID__c: id,
+            Status__c: 'Unread'
+        });
+    } catch (notifErr) {
+        console.error("Failed to create notification:", notifErr);
+    }
+
+    // Update DynamoDB Leave Status
+    const { updateLeaveStatusInDynamo, updateNotificationInDynamo } = await import('@/lib/dynamo-integration');
+    await updateLeaveStatusInDynamo({
+        EmployeeId: leave.Employee__c, 
+        StartDate: leave.StartDate__c,
+        Id: id,
+        Status: 'Rejected',
+        CancelReason: reason
+    });
+
+    // Update/Expire HR Notification
+    try {
+        const notifQuery = `SELECT Id, Employee__c FROM ${SF_OBJECTS.NOTIFICATION} WHERE Related_Record_ID__c = '${id}' AND Status__c = 'Pending'`;
+        const notifRecords = await queryRecords<any>(notifQuery);
+        
+        if (notifRecords && notifRecords.length > 0) {
+            for (const notif of notifRecords) {
+                // Update in Salesforce
+                await updateRecordInSalesforce(SF_OBJECTS.NOTIFICATION, notif.Id, {
+                    Status__c: 'Rejected',
+                    Action_Required__c: false,
+                    Is_Read__c: true
+                });
+
+                // Update in DynamoDB
+                const hrEmpQuery = `SELECT Employee_ID__c FROM ${SF_OBJECTS.EMPLOYEE} WHERE Id = '${notif.Employee__c}' LIMIT 1`;
+                const hrEmpResult = await queryRecords<any>(hrEmpQuery);
+                if (hrEmpResult && hrEmpResult.length > 0) {
+                     const hrStringId = hrEmpResult[0].Employee_ID__c;
+                     if (hrStringId) {
+                        await updateNotificationInDynamo(hrStringId, notif.Id, {
+                            Status: 'Rejected',
+                            ActionRequired: false,
+                            IsRead: true
+                        });
+                     }
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Failed to update previous notifications:", e);
     }
 
     return NextResponse.json(

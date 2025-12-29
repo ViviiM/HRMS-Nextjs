@@ -150,20 +150,46 @@ export async function POST(req: NextRequest) {
     }
 
     // Notify Employee
-    // Need employee email
-    const leaveRes = await conn.query(`SELECT Employee__r.Company_Email__c, Employee__r.Name, Leave_Type__c FROM Leave__c WHERE Id = '${leaveId}'`);
+    // Need employee email and phone
+    const leaveRes = await conn.query(`SELECT Employee__r.Company_Email__c, Employee__r.Name, Employee__r.Contact__r.Phone, Leave_Type__c FROM Leave__c WHERE Id = '${leaveId}'`);
     const leaveRec = leaveRes.records[0];
     
-    if (leaveRec && leaveRec.Employee__r?.Company_Email__c) {
-       await sendEmail({
-          to: leaveRec.Employee__r.Company_Email__c,
-          subject: `Leave Request ${action}ed`,
-          html: `
-             <p>Hi ${leaveRec.Employee__r.Name},</p>
-             <p>Your request for <strong>${leaveRec.Leave_Type__c}</strong> has been <strong>${newStatus}</strong>.</p>
-             ${rejectionReason ? `<p>Reason: ${rejectionReason}</p>` : ''}
-          `
-       });
+    if (leaveRec && leaveRec.Employee__r) {
+        const empName = leaveRec.Employee__r.Name;
+        const empEmail = leaveRec.Employee__r.Company_Email__c;
+        // Access nested Contact Phone appropriately depending on jsforce result structure (usually dot notation works in query but result object might be nested objects)
+        const empPhone = leaveRec.Employee__r.Contact__r?.Phone;
+
+        // Email Notification
+        if (empEmail) {
+            await sendEmail({
+                to: empEmail,
+                subject: `Leave Request ${action}ed`,
+                html: `
+                    <p>Hi ${empName},</p>
+                    <p>Your request for <strong>${leaveRec.Leave_Type__c}</strong> has been <strong>${newStatus}</strong>.</p>
+                    ${rejectionReason ? `<p>Reason: ${rejectionReason}</p>` : ''}
+                `
+            });
+        }
+
+        // WhatsApp Notification
+        if (empPhone) {
+            const { sendWhatsAppMessage } = await import("@/lib/whatsapp");
+            // Template: leave_status_update
+            // Variables: {{1}} = Name, {{2}} = Leave Type, {{3}} = Status
+            const components = [
+                {
+                    type: "body",
+                    parameters: [
+                        { type: "text", text: empName },
+                        { type: "text", text: leaveRec.Leave_Type__c },
+                        { type: "text", text: newStatus }
+                    ]
+                }
+            ];
+            await sendWhatsAppMessage(empPhone, "leave_status_update", "en_US", components as any);
+        }
     }
 
     return NextResponse.json({ success: true });
